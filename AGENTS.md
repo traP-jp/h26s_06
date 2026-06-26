@@ -12,6 +12,15 @@
 - ドキュメントと異なる指示があった場合、できる限りドキュメントを指示に合わせて修正する。
   - その際、変更点を追記するよりも、既存の内容を修正する方を優先する。
 
+## Git / PR Rules
+
+- For development work, always create a new branch before editing code.
+- Branch names must start with a type prefix such as `feat/`, `fix/`, or `chore/`.
+- Before editing code, AI agents must ask the user whether the work should be done in a git worktree.
+- Commit messages must be a single line and start with a Conventional Commits prefix such as `fix:`, `feat:`, or `chore:`.
+- PR titles must follow the same format as commit messages, starting with a prefix such as `fix:`, `feat:`, or `chore:`.
+- PR descriptions must be short, clean, and focused on the key points.
+
 ## Directories
 
 ./
