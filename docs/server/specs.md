@@ -1,0 +1,174 @@
+# バックエンド詳細仕様書
+
+## 1. システムの基本方針
+
+本システムは、traQ上のリアルタイムなコミュニケーション・アクティビティを視覚化するためのバックエンド基盤である。
+
+* **役割の明確化**: バックエンドは「イベントの集約」と「最小限のインパルス送信」「定期的な状態の正解同期」に特化する。波紋の伝播計算や時間経過による滑らかな減衰などの重い処理はすべてフロントエンドに委譲する。
+* **非機能要件の遵守**: 7000チャンネル・最大700名同時接続という環境下において、メモリ使用量を常に150MB以下に抑え、ネットワーク帯域を最小化する設計を徹底する。
+* **通信プロトコル**: リアルタイムかつ単方向のデータストリームに最適なSSE (Server-Sent Events) を採用する。
+
+---
+
+## 2. インメモリデータ構造と状態管理
+
+高速なアクセスとメモリ効率を両立するため、システム全体のチャンネルは「Grand Root」を頂点とする単一のフラットなマップとして管理する。
+
+### 2.1 データ構造 (Go Struct)
+
+ポインタによるツリー構造はGCの負荷を上げるため避け、ID（文字列）をキーとしたフラットな辞書型（`map`）で状態を保持する。定期同期のためのメタデータもここに含める。
+
+```go
+// システム全体の根となる仮想ID
+const GrandRootID = "grand_root"
+
+// Channel: 各チャンネルの静的情報と動的スコアを管理
+type Channel struct {
+	ID            string
+	ParentID      string   // 最上位ノードは GrandRootID を指す
+	Children      []string // 子チャンネルIDのリスト
+	Score         float64  // バックエンド側が持つ「正解の盛り上がり度」
+	LastSyncScore float64  // 前回フロントへ送信した時点のスコア
+	LastSyncTime  time.Time// 前回フロントへ送信した時刻
+}
+
+// UserState: ユーザーの現在位置を管理（ビームのアニメーション計算用）
+type UserState struct {
+	UserID         string
+	CurrentChannel string    // 現在閲覧中のチャンネルID
+	LastUpdated    time.Time // 最終更新日時
+}
+
+// StateManager: システム全体の状態をスレッドセーフに管理
+type StateManager struct {
+	mu       sync.RWMutex
+	channels map[string]*Channel
+	users    map[string]*UserState
+}
+
+```
+
+### 2.2 排他制御 (Race Condition対策)
+
+`StateManager` 全体に単一の `sync.RWMutex` を配置する。
+
+* **Lock (書き込み)**: 投稿イベント受信時、スコア加算時、ユーザーのチャンネル移動検知時。
+* **RLock (読み込み)**: フロントへの差分データ（syncイベント）生成時、ツリー構造探索時。
+
+---
+
+## 3. SSE ペイロード仕様
+
+SSEストリームでは、イベント種別（`event:`）に応じて極限まで軽量化したJSONデータを配信する。
+
+### 3.1 `init` イベント (初期化データ)
+
+新規クライアント接続時に一度だけ送信される、全7000チャンネルの構造データ。サーバー側で事前にJSONとしてキャッシュしておく。
+
+```json
+event: init
+data: {
+  "channels": {
+    "grand_root": { "id": "grand_root", "parentId": "", "children": ["root_ch_1", "root_ch_2"] },
+    "root_ch_1": { "id": "root_ch_1", "parentId": "grand_root", "children": ["sub_ch_10"] }
+  }
+}
+
+```
+
+### 3.2 `trigger` イベント (インパルス配信)
+
+投稿（波紋）や移動（ビーム）が発生した瞬間に即時ブロードキャストされる軽量トリガー。キー名を短縮し帯域を節約する。
+
+**投稿 (MessageCreated) 時:**
+
+```json
+event: trigger
+data: {"type": "msg", "ch": "sub_ch_10"}
+
+```
+
+**移動 (ChannelWatched) 時:**
+
+```json
+event: trigger
+data: {"type": "mov", "usr": "user_hash_123", "from": "sub_ch_10", "to": "sub_ch_11"}
+
+```
+
+### 3.3 `sync` イベント (定期同期)
+
+30秒ごとにバックエンドの「正解スコア」を配信し、フロントエンドの自律減衰によるズレを補正する。抽出された差分のみを送信する。
+
+```json
+event: sync
+data: {
+  "ts": 1719300000,
+  "deltas": {
+    "sub_ch_10": 45.2,
+    "root_ch_1": 12.8
+  }
+}
+
+```
+
+---
+
+## 4. コアロジックの詳細
+
+### 4.1 初期化データのキューイング（メモリスパイク対策）
+
+150MBのメモリ制約を守るため、700人が一斉に接続してきた際のHTTP書き込みバッファのスパイクをセマフォで制御する。同時に巨大なJSONを送信できるゴルーチン数を制限する。
+
+```go
+const maxConcurrentInits = 10
+var initSemaphore = make(chan struct{}, maxConcurrentInits)
+
+func handleSSEConnect(w http.ResponseWriter, r *http.Request) {
+	initSemaphore <- struct{}{}
+	sendInitData(w) // キャッシュ済みJSONの送信
+	w.(http.Flusher).Flush()
+	<-initSemaphore
+	
+	// 以降、trigger / sync イベントの受信ループへ移行
+}
+
+```
+
+### 4.2 移動検知ロジック
+
+traQからのイベント受信時、インメモリの `users["userID"].CurrentChannel` と比較し、変化があれば `trigger(type: mov)` イベントを生成して `CurrentChannel` を更新する。
+
+### 4.3 確率的な同期イベントの送信アルゴリズム
+
+全チャンネルのスコアが常に減衰し続ける仕様において、差分抽出を効果的に機能させるため、**「スコア変化量」と「経過時間」に基づく確率的同期**を行う。
+
+30秒ごとのTicker処理において、各チャンネルが `sync` ペイロードに含まれる確率 $P$ を以下の数式で算出する。
+
+$$P = \min\left(1.0, \alpha \times |\Delta S| + \beta \times \Delta T\right)$$
+
+* $\Delta S$: 前回同期時からのスコア変化量 (`math.Abs(Score - LastSyncScore)`)
+* $\Delta T$: 前回同期時からの経過時間（秒）
+* $\alpha, \beta$: 確率を調整する重み係数
+
+```go
+func generateSyncPayload() {
+	now := time.Now()
+	deltas := make(map[string]float64)
+
+	for _, ch := range sm.channels {
+		deltaS := math.Abs(ch.Score - ch.LastSyncScore)
+		deltaT := now.Sub(ch.LastSyncTime).Seconds()
+
+		prob := (alpha * deltaS) + (beta * deltaT)
+
+		if rand.Float64() < prob {
+			deltas[ch.ID] = ch.Score
+			ch.LastSyncScore = ch.Score
+			ch.LastSyncTime = now
+		}
+	}
+	// deltas を送信キューへ投入
+}
+
+```

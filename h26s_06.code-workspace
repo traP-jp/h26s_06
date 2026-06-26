@@ -1,0 +1,24 @@
+{
+    "folders": [
+        {
+            "name": "Client",
+            "path": "apps/client"
+        },
+        {
+            "name": "Server",
+            "path": "apps/server"
+        },
+        {
+            "name": "Docs",
+            "path": "docs"
+        },
+        {
+            "name": "Mocks",
+            "path": "mocks"
+        },
+        {
+            "name": "h26s_06",
+            "path": "."
+        }
+    ]
+}
