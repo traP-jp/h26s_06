@@ -17,6 +17,10 @@
             "path": "mocks"
         },
         {
+            "name": "Sandbox",
+            "path": "sandbox"
+        },
+        {
             "name": "h26s_06",
             "path": "."
         }
