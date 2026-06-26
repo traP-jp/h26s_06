@@ -1,45 +1,71 @@
 {
-  "name": "h26s_06",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "run-p type-check \"build-only {@}\" --",
-    "preview": "vite preview",
-    "build-only": "vite build",
-    "type-check": "vue-tsc --build"
-  },
-  "dependencies": {
-    "vue": "beta"
-  },
-  "devDependencies": {
-    "@tsconfig/node24": "^24.0.4",
-    "@types/node": "^24.13.2",
-    "@vitejs/plugin-vue": "^6.0.7",
-    "@vue/tsconfig": "^0.9.1",
-    "npm-run-all2": "^9.0.2",
-    "typescript": "~6.0.0",
-    "vite": "^8.0.16",
-    "vite-plugin-vue-devtools": "^8.1.2",
-    "vue-tsc": "^3.3.5"
-  },
-  "engines": {
-    "node": "^22.18.0 || >=24.12.0"
-  },
-  "overrides": {
-    "vue": "beta",
-    "@vue/compiler-core": "beta",
-    "@vue/compiler-dom": "beta",
-    "@vue/compiler-sfc": "beta",
-    "@vue/compiler-ssr": "beta",
-    "@vue/compiler-vapor": "beta",
-    "@vue/reactivity": "beta",
-    "@vue/runtime-core": "beta",
-    "@vue/runtime-dom": "beta",
-    "@vue/runtime-vapor": "beta",
-    "@vue/server-renderer": "beta",
-    "@vue/shared": "beta",
-    "@vue/compat": "beta"
-  }
+    "name": "h26s_06",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "type-check \"build-only {@}\" --",
+        "build-only": "vite build",
+        "check": "bun run scripts/runChecks.ts check",
+        "check:fix": "bun run scripts/runChecks.ts fix",
+        "check:format": "prettier --check --cache .",
+        "check:format:fix": "prettier --write --cache .",
+        "check:lint": "eslint . --cache",
+        "check:lint:fix": "eslint . --fix --cache",
+        "check:type": "vue-tsc --noEmit",
+        "dev": "vite",
+        "dev:build": "bun run --bun dev --build",
+        "husky:prepare": "cd .. && husky app/.husky",
+        "preview:build": "bun run --bun preview --build"
+    },
+    "overrides": {
+        "@vue/compat": "beta",
+        "@vue/compiler-core": "beta",
+        "@vue/compiler-dom": "beta",
+        "@vue/compiler-sfc": "beta",
+        "@vue/compiler-ssr": "beta",
+        "@vue/compiler-vapor": "beta",
+        "@vue/reactivity": "beta",
+        "@vue/runtime-core": "beta",
+        "@vue/runtime-dom": "beta",
+        "@vue/runtime-vapor": "beta",
+        "@vue/server-renderer": "beta",
+        "@vue/shared": "beta",
+        "vue": "beta"
+    },
+    "dependencies": {
+        "vue": "beta"
+    },
+    "devDependencies": {
+        "@eslint/css": "^1.3.0",
+        "@eslint/js": "^9.21.0",
+        "@trivago/prettier-plugin-sort-imports": "^6.0.2",
+        "@tsconfig/node24": "^24.0.4",
+        "@types/bun": "^1.3",
+        "@types/css-modules": "^1.0.5",
+        "@types/glob": "^9.0.0",
+        "@types/node": "^25.5.2",
+        "@types/ws": "^8.18.1",
+        "@vitejs/plugin-vue": "^6.0.7",
+        "@vue/tsconfig": "^0.9.1",
+        "eslint": "^9.39.4",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-jsonc": "^3.2.0",
+        "eslint-plugin-unicorn": "^65.0.1",
+        "glob": "^13.0.6",
+        "globals": "^17.6.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^17.0.7",
+        "npm-run-all2": "^9.0.2",
+        "prettier": "^3.8.4",
+        "typescript": "^6.0",
+        "typescript-eslint": "^8.61.0",
+        "vite": "^8.0.16",
+        "vite-plugin-vue-devtools": "^8.1.2",
+        "vue-tsc": "^3.3.5"
+    },
+    "engines": {
+        "bun": ">=1.3.0",
+        "node": ">=24.12.0"
+    }
 }
