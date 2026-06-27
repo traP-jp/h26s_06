@@ -165,8 +165,44 @@ func (s *server) fetchMessageInfo(ctx context.Context, accessToken string, messa
 	if err := json.Unmarshal(body, &message); err != nil {
 		return "", false, err
 	}
-	traqLogOK("GET /api/v3/messages/%s -> %s channelID=%s bot=%t", messageID, resp.Status, message.ChannelID, message.User.Bot)
-	return message.ChannelID, message.User.Bot, nil
+	if message.UserID == "" {
+		return "", false, fmt.Errorf("message endpoint returned empty userId for %s", messageID)
+	}
+
+	isBot, err := s.fetchUserIsBot(ctx, accessToken, message.UserID)
+	if err != nil {
+		return "", false, err
+	}
+	traqLogOK("GET /api/v3/messages/%s -> %s channelID=%s userID=%s bot=%t", messageID, resp.Status, message.ChannelID, message.UserID, isBot)
+	return message.ChannelID, isBot, nil
+}
+
+func (s *server) fetchUserIsBot(ctx context.Context, accessToken string, userID string) (bool, error) {
+	traqLogAPI("GET /api/v3/users/%s", userID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.cfg.traqBaseURL+"/api/v3/users/"+url.PathEscape(userID), nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		traqLogError("GET /api/v3/users/%s failed: %v", userID, err)
+		return false, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		traqLogError("GET /api/v3/users/%s -> %s", userID, resp.Status)
+		return false, fmt.Errorf("user endpoint returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+
+	var user traqUser
+	if err := json.Unmarshal(body, &user); err != nil {
+		return false, err
+	}
+	traqLogOK("GET /api/v3/users/%s -> %s bot=%t", userID, resp.Status, user.Bot)
+	return user.Bot, nil
 }
 
 func hashViewerKey(key string) string {

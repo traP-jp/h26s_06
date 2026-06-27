@@ -154,9 +154,11 @@ type traqChannel struct {
 
 type traqMessage struct {
 	ChannelID string `json:"channelId"`
-	User      struct {
-		Bot bool `json:"bot"`
-	} `json:"user"`
+	UserID    string `json:"userId"`
+}
+
+type traqUser struct {
+	Bot bool `json:"bot"`
 }
 
 type traqViewer struct {
