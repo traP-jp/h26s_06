@@ -13,14 +13,15 @@ func newServer(cfg config) (*server, error) {
 	}
 
 	return &server{
-		cfg:        cfg,
-		client:     &http.Client{Timeout: 15 * time.Second},
-		states:     map[string]time.Time{},
-		sessions:   map[string]tokenResponse{},
-		demoState:  demoState,
-		demoHub:    newEventHub(),
-		liveHub:    newEventHub(),
-		initTokens: make(chan struct{}, maxConcurrentInits),
+		cfg:          cfg,
+		client:       &http.Client{Timeout: 15 * time.Second},
+		states:       map[string]time.Time{},
+		sessions:     map[string]tokenResponse{},
+		userBotCache: map[string]bool{},
+		demoState:    demoState,
+		demoHub:      newEventHub(),
+		liveHub:      newEventHub(),
+		initTokens:   make(chan struct{}, maxConcurrentInits),
 	}, nil
 }
 
