@@ -7,11 +7,13 @@ import {
     forceY,
     forceZ,
 } from "d3-force-3d";
-import type { SimulationLinkDatum, SimulationNodeDatum } from "d3-force-3d";
+import type { Force, SimulationLinkDatum, SimulationNodeDatum } from "d3-force-3d";
 
 const POSITION_COMPONENTS = 3;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const ROOT_SEPARATION = 55;
+const MIN_OUTWARD_DOT = 0.001;
+const HEAT_REPULSION_STRENGTH = 34;
 
 export interface LayoutNode {
     index: number;
@@ -22,6 +24,7 @@ export interface LayoutNode {
     isLayoutActive: boolean;
     isExpansionOrigin: boolean;
     emphasis: number;
+    relativeScore: number;
     x: number;
     y: number;
     z: number;
@@ -33,6 +36,7 @@ interface ForceNode extends SimulationNodeDatum {
     islandId: number;
     radius: number;
     emphasis: number;
+    heatScore: number;
 }
 
 interface ForceLinkDatum extends SimulationLinkDatum<ForceNode> {
@@ -78,6 +82,7 @@ export function calculateLayout(nodes: LayoutNode[]) {
         hierarchy,
         positions
     );
+    const heatScores = aggregateHeatScores(activeNodes, hierarchy);
 
     const forceNodes: ForceNode[] = activeNodes.map(node => {
         const position = readPosition(positions, node.index);
@@ -89,6 +94,7 @@ export function calculateLayout(nodes: LayoutNode[]) {
             islandId: node.islandId,
             radius,
             emphasis: node.emphasis,
+            heatScore: heatScores.get(node.index) ?? node.relativeScore,
             x: position.x,
             y: position.y,
             z: position.z,
@@ -130,6 +136,7 @@ export function calculateLayout(nodes: LayoutNode[]) {
                 .distanceMax(240)
                 .theta(1)
         )
+        .force("heat-repulsion", forceHeatRepulsion())
         .force(
             "collide",
             forceCollide<ForceNode>()
@@ -158,6 +165,7 @@ export function calculateLayout(nodes: LayoutNode[]) {
         .stop();
 
     simulation.tick(simulationTicks);
+    constrainDeepNodesOutward(forceNodes, activeNodes, activeByIndex);
 
     for (const node of forceNodes) {
         setPosition(positions, node.id, node.x ?? 0, node.y ?? 0, node.z ?? 0);
@@ -183,6 +191,27 @@ function createActiveHierarchy(
     }
 
     return { childrenByParent, ordinalByChild };
+}
+
+function aggregateHeatScores(activeNodes: LayoutNode[], hierarchy: ActiveHierarchy) {
+    const heatScores = new Map<number, number>();
+    const nodeByIndex = new Map(activeNodes.map(node => [node.index, node]));
+
+    const visit = (node: LayoutNode): number => {
+        const cached = heatScores.get(node.index);
+        if (cached !== undefined) return cached;
+
+        let heat = node.relativeScore;
+        for (const childIndex of hierarchy.childrenByParent.get(node.index) ?? []) {
+            const child = nodeByIndex.get(childIndex);
+            if (child) heat = Math.max(heat, visit(child));
+        }
+        heatScores.set(node.index, heat);
+        return heat;
+    };
+
+    for (const node of activeNodes) visit(node);
+    return heatScores;
 }
 
 function createIslandCenters(islandIds: number[]) {
@@ -342,6 +371,75 @@ function branchAxis(
     return { x: 1, y: 0, z: 0 };
 }
 
+function forceHeatRepulsion(): Force<ForceNode> {
+    let nodes: ForceNode[] = [];
+
+    const force = (alpha: number) => {
+        for (const node of nodes) {
+            if (node.depth <= 0 || node.heatScore <= 0) continue;
+
+            const position = pointFromForce(node);
+            const axis =
+                lengthSquared(position) > 0.01 ? normalize(position) : fallbackAxis(node.id);
+            const strength = alpha * HEAT_REPULSION_STRENGTH * node.heatScore;
+            node.vx = (node.vx ?? 0) + axis.x * strength;
+            node.vy = (node.vy ?? 0) + axis.y * strength;
+            node.vz = (node.vz ?? 0) + axis.z * strength;
+        }
+    };
+    force.initialize = (initializedNodes: ForceNode[]) => {
+        nodes = initializedNodes;
+    };
+    return force;
+}
+
+function constrainDeepNodesOutward(
+    forceNodes: ForceNode[],
+    activeNodes: LayoutNode[],
+    activeByIndex: ReadonlyMap<number, LayoutNode>
+) {
+    const forceByID = new Map(forceNodes.map(node => [node.id, node]));
+    const deepNodes = [...activeNodes]
+        .filter(node => node.depth >= 3)
+        .sort((left, right) => left.depth - right.depth);
+    for (const node of deepNodes) {
+        const parent = activeByIndex.get(node.parentIndex);
+        const grandParent = parent ? activeByIndex.get(parent.parentIndex) : undefined;
+        const forceNode = forceByID.get(node.index);
+        const forceParent = parent ? forceByID.get(parent.index) : undefined;
+        const forceGrandParent = grandParent ? forceByID.get(grandParent.index) : undefined;
+        if (!parent || !grandParent || !forceNode || !forceParent || !forceGrandParent) continue;
+
+        const grandParentPosition = pointFromForce(forceGrandParent);
+        const parentPosition = pointFromForce(forceParent);
+        const nodePosition = pointFromForce(forceNode);
+        const displacement = subtract(nodePosition, parentPosition);
+        const axis = outwardAxisFromGrandParent(parentPosition, grandParentPosition, displacement);
+        const outwardDistance = dot(displacement, axis);
+        if (outwardDistance > MIN_OUTWARD_DOT) continue;
+
+        const correction = MIN_OUTWARD_DOT - outwardDistance;
+        forceNode.x = nodePosition.x + axis.x * correction;
+        forceNode.y = nodePosition.y + axis.y * correction;
+        forceNode.z = nodePosition.z + axis.z * correction;
+    }
+}
+
+function outwardAxisFromGrandParent(
+    parentPosition: Point,
+    grandParentPosition: Point,
+    fallback: Point
+) {
+    const parentBranch = subtract(parentPosition, grandParentPosition);
+    if (lengthSquared(parentBranch) > 0.01) return normalize(parentBranch);
+    if (lengthSquared(fallback) > 0.01) return normalize(fallback);
+    return { x: 1, y: 0, z: 0 };
+}
+
+function pointFromForce(node: ForceNode): Point {
+    return { x: node.x ?? 0, y: node.y ?? 0, z: node.z ?? 0 };
+}
+
 function createLinks(
     activeNodes: LayoutNode[],
     activeByIndex: ReadonlyMap<number, LayoutNode>,
@@ -387,6 +485,17 @@ function pseudoRandom(seed: number) {
     return x - Math.floor(x);
 }
 
+function fallbackAxis(seed: number): Point {
+    const angle = pseudoRandom(seed) * Math.PI * 2;
+    const z = pseudoRandom(seed + 97) * 2 - 1;
+    const horizontalRadius = Math.sqrt(Math.max(0, 1 - z * z));
+    return {
+        x: Math.cos(angle) * horizontalRadius,
+        y: Math.sin(angle) * horizontalRadius,
+        z,
+    };
+}
+
 function subtract(left: Point, right: Point): Point {
     return { x: left.x - right.x, y: left.y - right.y, z: left.z - right.z };
 }
@@ -397,6 +506,10 @@ function cross(left: Point, right: Point): Point {
         y: left.z * right.x - left.x * right.z,
         z: left.x * right.y - left.y * right.x,
     };
+}
+
+function dot(left: Point, right: Point) {
+    return left.x * right.x + left.y * right.y + left.z * right.z;
 }
 
 function lengthSquared(point: Point) {

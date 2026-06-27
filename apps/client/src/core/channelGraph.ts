@@ -14,6 +14,12 @@ const PALETTE = [
 const DENSE_CHILD_THRESHOLD = 24;
 const DENSE_EMPHASIZED_CHILDREN = 12;
 const CONDENSED_EMPHASIS = 0.22;
+const MESSAGE_SCORE_AMOUNT = 1.0;
+const MOVEMENT_SCORE_AMOUNT = 0.25;
+const ANCESTOR_SCORE_FACTOR = 0.45;
+const SCORE_DECAY_TIME_SCALE = 300;
+const RELATIVE_SCORE_SCALE_FLOOR = 2.2;
+const ACTIVE_RELATIVE_SCORE_THRESHOLD = 0.08;
 
 export interface ChannelNode {
     index: number;
@@ -25,6 +31,7 @@ export interface ChannelNode {
     depth: number;
     currentScore: number;
     targetScore: number;
+    relativeScore: number;
     x: number;
     y: number;
     z: number;
@@ -47,6 +54,7 @@ export class ChannelGraph {
     private readonly nodeMap = new Map<string, number>();
     private readonly visualEvents: VisualEvent[] = [];
     private snapNextSync = false;
+    private scoreScale = RELATIVE_SCORE_SCALE_FLOOR;
 
     constructor(channels: ChannelDictionary) {
         const ordered = orderChannels(channels);
@@ -62,6 +70,7 @@ export class ChannelGraph {
                 depth: channel.depth ?? 0,
                 currentScore: 0,
                 targetScore: 0,
+                relativeScore: 0,
                 x: 0,
                 y: 0,
                 z: 0,
@@ -130,11 +139,11 @@ export class ChannelGraph {
         }
 
         let node = this.get(id);
-        let heat = trigger.type === "msg" ? 46 : 11;
+        let heat = trigger.type === "msg" ? MESSAGE_SCORE_AMOUNT : MOVEMENT_SCORE_AMOUNT;
         while (node) {
-            node.currentScore = Math.min(100, node.currentScore + heat);
+            node.currentScore += heat;
             node.targetScore = Math.max(node.targetScore, node.currentScore * 0.62);
-            heat *= 0.45;
+            heat *= ANCESTOR_SCORE_FACTOR;
             node = node.parentId ? this.get(node.parentId) : undefined;
         }
     }
@@ -226,6 +235,16 @@ export class ChannelGraph {
             }
         }
 
+        const scoreActiveAncestorIds = new Set<string>();
+        for (const node of this.nodes) {
+            if (node.relativeScore <= ACTIVE_RELATIVE_SCORE_THRESHOLD) continue;
+            let parent = node.parentId ? this.get(node.parentId) : undefined;
+            while (parent) {
+                scoreActiveAncestorIds.add(parent.id);
+                parent = parent.parentId ? this.get(parent.parentId) : undefined;
+            }
+        }
+
         const emphasizedIds = this.pickDenseChildren(requiredEmphasisIds);
         for (const node of this.nodes) {
             const isExpansionOrigin = node.id === selectedId && node.children.length > 0;
@@ -237,7 +256,9 @@ export class ChannelGraph {
             let shouldBeActive = false;
             if (node.depth < k) {
                 shouldBeActive = true;
-            } else if (node.depth === k && node.targetScore > 10) {
+            } else if (node.relativeScore > ACTIVE_RELATIVE_SCORE_THRESHOLD) {
+                shouldBeActive = true;
+            } else if (scoreActiveAncestorIds.has(node.id)) {
                 shouldBeActive = true;
             } else if (activePaths.has(node.id)) {
                 shouldBeActive = true;
@@ -297,7 +318,10 @@ export class ChannelGraph {
                 emphasizedIds.add(child.id);
             }
             for (const child of candidates) {
-                if (requiredIds.has(child.id) || child.targetScore > 10) {
+                if (
+                    requiredIds.has(child.id) ||
+                    child.relativeScore > ACTIVE_RELATIVE_SCORE_THRESHOLD
+                ) {
                     emphasizedIds.add(child.id);
                 }
             }
@@ -307,15 +331,28 @@ export class ChannelGraph {
     }
 
     update(deltaSeconds: number) {
-        const decay = Math.exp(-deltaSeconds / 24);
+        const decay = Math.exp(-deltaSeconds / SCORE_DECAY_TIME_SCALE);
         const blend = 1 - Math.exp(-deltaSeconds * 3.5);
         const spatialBlend = 1 - Math.exp(-deltaSeconds * 6.0);
 
+        let observedMaxScore = RELATIVE_SCORE_SCALE_FLOOR;
         for (const node of this.nodes) {
             node.currentScore *= decay;
             node.currentScore += (node.targetScore - node.currentScore) * blend;
             node.targetScore *= decay;
             if (node.currentScore < 0.01) node.currentScore = 0;
+            if (node.targetScore < 0.01) node.targetScore = 0;
+            observedMaxScore = Math.max(observedMaxScore, node.currentScore, node.targetScore);
+        }
+
+        const scaleBlend =
+            observedMaxScore > this.scoreScale
+                ? 1 - Math.exp(-deltaSeconds * 8.0)
+                : 1 - Math.exp(-deltaSeconds / SCORE_DECAY_TIME_SCALE);
+        this.scoreScale += (observedMaxScore - this.scoreScale) * scaleBlend;
+
+        for (const node of this.nodes) {
+            node.relativeScore = Math.min(1, node.currentScore / this.scoreScale);
 
             node.x += (node.targetX - node.x) * spatialBlend;
             node.y += (node.targetY - node.y) * spatialBlend;

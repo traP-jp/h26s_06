@@ -410,7 +410,7 @@ function updateCameraTarget(id: string | undefined) {
 }
 
 function cameraObstacleRadius(node: ChannelGraph["nodes"][number]) {
-    const heat = node.currentScore / 100;
+    const heat = node.relativeScore;
     const baseScale =
         node.id === "grand_root"
             ? 4.2
@@ -504,7 +504,7 @@ function pickNodeAt(x: number, y: number, bounds: DOMRect) {
 
         if (
             props.activeOnly &&
-            node.currentScore <= 0.08 &&
+            node.relativeScore <= 0.08 &&
             node.id !== "grand_root" &&
             node.id !== props.selectedId
         ) {
