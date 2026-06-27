@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -62,7 +63,7 @@ func TestEnsureLiveChannelDataUsesBotTokenWhenConfigured(t *testing.T) {
 		t.Fatalf("newServer returned error: %v", err)
 	}
 
-	if _, err := srv.ensureLiveChannelData(t.Context(), "user-token"); err != nil {
+	if _, err := srv.ensureLiveChannelData(context.Background(), "user-token"); err != nil {
 		t.Fatalf("ensureLiveChannelData returned error: %v", err)
 	}
 	if gotAuth != "Bearer bot-token" {
@@ -83,7 +84,7 @@ func TestEnsureLiveChannelDataFallsBackToUserToken(t *testing.T) {
 		t.Fatalf("newServer returned error: %v", err)
 	}
 
-	if _, err := srv.ensureLiveChannelData(t.Context(), "user-token"); err != nil {
+	if _, err := srv.ensureLiveChannelData(context.Background(), "user-token"); err != nil {
 		t.Fatalf("ensureLiveChannelData returned error: %v", err)
 	}
 	if gotAuth != "Bearer user-token" {
