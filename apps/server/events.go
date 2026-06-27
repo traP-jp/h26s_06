@@ -37,19 +37,12 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	var liveChannels []traqChannel
 
 	if !demo {
-		data, err := s.fetchChannelData(r.Context(), token.AccessToken)
+		data, err := s.ensureLiveChannelData(r.Context(), token.AccessToken)
 		if err != nil {
 			writeSSE(w, marshalEvent("stream-error", map[string]string{"error": err.Error()}))
 			flusher.Flush()
 			return
 		}
-		liveState, err := newStateManagerFromTraq(data.Channels)
-		if err != nil {
-			writeSSE(w, marshalEvent("stream-error", map[string]string{"error": err.Error()}))
-			flusher.Flush()
-			return
-		}
-		s.replaceState(liveState)
 		initPayload = data.InitJSON
 		liveChannelIDs = data.ChannelIDs
 		liveChannels = data.Channels

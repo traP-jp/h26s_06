@@ -57,6 +57,24 @@ func (s *server) currentState() *stateManager {
 	return s.state
 }
 
+func (s *server) ensureLiveChannelData(ctx context.Context, accessToken string) (channelData, error) {
+	s.liveMu.Lock()
+	defer s.liveMu.Unlock()
+
+	if s.liveReady {
+		return s.liveData, nil
+	}
+
+	data, err := s.fetchChannelData(ctx, accessToken)
+	if err != nil {
+		return channelData{}, err
+	}
+	s.replaceState(data.State)
+	s.liveData = data
+	s.liveReady = true
+	return data, nil
+}
+
 func (s *server) replaceState(state *stateManager) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()

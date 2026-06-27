@@ -22,6 +22,10 @@ type server struct {
 	states   map[string]time.Time
 	sessions map[string]tokenResponse
 
+	liveMu    sync.Mutex
+	liveReady bool
+	liveData  channelData
+
 	stateMu    sync.RWMutex
 	state      *stateManager
 	hub        *eventHub
@@ -150,6 +154,7 @@ type channelData struct {
 	Channels   []traqChannel
 	ChannelIDs map[string]bool
 	InitJSON   []byte
+	State      *stateManager
 }
 
 type wsEvent struct {

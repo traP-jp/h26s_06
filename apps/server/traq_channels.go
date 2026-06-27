@@ -40,6 +40,7 @@ func (s *server) fetchChannelData(ctx context.Context, accessToken string) (chan
 		Channels:   channels,
 		ChannelIDs: channelIDSet(channels),
 		InitJSON:   state.initPayloadBytes(),
+		State:      state,
 	}, nil
 }
 
