@@ -33,7 +33,11 @@ func (s *server) handleStatus(c echo.Context) error {
 		return echoHTTPError(c, "channel is required", http.StatusBadRequest)
 	}
 
-	data, err := s.ensureLiveChannelData(c.Request().Context(), token.AccessToken)
+	if s.cfg.traqBotAccessToken == "" {
+		return echoHTTPError(c, "TRAQ_BOT_ACCESS_TOKEN is not configured", http.StatusServiceUnavailable)
+	}
+
+	data, err := s.ensureLiveChannelData(c.Request().Context(), s.cfg.traqBotAccessToken)
 	if err != nil {
 		traqLogError("failed to load channel data for status update: %v", err)
 		return echoHTTPError(c, "failed to load channel data", http.StatusBadGateway)
