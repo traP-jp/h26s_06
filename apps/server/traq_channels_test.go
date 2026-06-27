@@ -71,7 +71,7 @@ func TestEnsureLiveChannelDataUsesBotTokenWhenConfigured(t *testing.T) {
 	}
 }
 
-func TestEnsureLiveChannelDataFallsBackToUserToken(t *testing.T) {
+func TestEnsureLiveChannelDataRequiresBotToken(t *testing.T) {
 	var gotAuth string
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
@@ -79,7 +79,7 @@ func TestEnsureLiveChannelDataFallsBackToUserToken(t *testing.T) {
 	}))
 	defer api.Close()
 
-	srv, err := newServer(config{traqBaseURL: api.URL})
+	srv, err := newServer(config{traqBaseURL: api.URL, traqBotAccessToken: "bot-token"})
 	if err != nil {
 		t.Fatalf("newServer returned error: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestEnsureLiveChannelDataFallsBackToUserToken(t *testing.T) {
 	if _, err := srv.ensureLiveChannelData(context.Background(), "user-token"); err != nil {
 		t.Fatalf("ensureLiveChannelData returned error: %v", err)
 	}
-	if gotAuth != "Bearer user-token" {
-		t.Fatalf("Authorization = %q, want Bearer user-token", gotAuth)
+	if gotAuth != "Bearer bot-token" {
+		t.Fatalf("Authorization = %q, want Bearer bot-token", gotAuth)
 	}
 }
