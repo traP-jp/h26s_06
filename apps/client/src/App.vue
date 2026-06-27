@@ -5,12 +5,12 @@ import { audioManager } from "./audio/audioManager.ts";
 import GalaxyCanvas from "./components/GalaxyCanvas.vue";
 import { useAppState } from "./composables/useAppState";
 import { ChannelGraph } from "./core/channelGraph";
-import { beginLogin, fetchCurrentUser, logout } from "./services/auth";
+import { beginLogin, fetchCurrentUser } from "./services/auth";
 import { calculateChannelLayout } from "./services/channelLayout";
 import { EventStream } from "./services/eventStream";
 import type { AuthUser } from "./types/api";
 
-type AuthState = "checking" | "authenticated" | "unauthenticated" | "error";
+type AuthState = "checking" | "authenticated" | "error";
 
 const isDemoMode = new URLSearchParams(window.location.search).get("demo") === "1";
 
@@ -39,16 +39,10 @@ const {
 } = useAppState();
 
 const authState = ref<AuthState>(isDemoMode ? "authenticated" : "checking");
-const authMessage = ref(isDemoMode ? "デモストリームに接続します" : "traQ のログイン状態を確認中");
 const currentUser = ref<AuthUser>();
 const focusId = ref<string | undefined>();
 
-const showAuthCover = computed(() => !isDemoMode && authState.value !== "authenticated");
-const showLoading = computed(() => !showAuthCover.value && !graph.value);
-const accessLabel = computed(() => (isDemoMode ? "DEMO ACCESS" : "traQ OAUTH"));
-const authPrimaryLabel = computed(() =>
-    authState.value === "checking" ? "確認中..." : "traQ でログイン"
-);
+const showLoading = computed(() => authState.value !== "error" && !graph.value);
 
 // audio settings
 const muted = ref(audioManager.muted);
@@ -157,31 +151,9 @@ function onMove(): void {
     audioManager.playMove();
 }
 
-function handleLogin() {
-    beginLogin();
-}
-
-async function handleLogout() {
-    stopStream(true);
-    authState.value = "checking";
-    authMessage.value = "ログアウト中";
-    currentUser.value = undefined;
-    status.value = "ログアウト中";
-
-    try {
-        await logout();
-        authState.value = "unauthenticated";
-        authMessage.value = "ログアウトしました。再度ログインしてください。";
-        connection.value = "closed";
-        status.value = "ログアウトしました";
-    } catch {
-        await retryAuthentication();
-    }
-}
-
 async function retryAuthentication() {
     if (isDemoMode) return;
-    const authenticated = await refreshAuthentication("ログインが必要です。");
+    const authenticated = await refreshAuthentication();
     if (authenticated) {
         connectStream();
     }
@@ -197,10 +169,9 @@ function stopStream(clearGraph: boolean) {
     }
 }
 
-async function refreshAuthentication(unauthenticatedMessage: string) {
+async function refreshAuthentication() {
     const currentGeneration = ++authGeneration;
     authState.value = "checking";
-    authMessage.value = "traQ のログイン状態を確認中";
     status.value = "認証状態を確認中";
 
     try {
@@ -208,25 +179,21 @@ async function refreshAuthentication(unauthenticatedMessage: string) {
         if (!mounted || currentGeneration !== authGeneration) return false;
 
         if (!user) {
-            currentUser.value = undefined;
-            authState.value = "unauthenticated";
-            authMessage.value = unauthenticatedMessage;
             stopStream(true);
             connection.value = "closed";
             status.value = "ログインが必要です";
+            beginLogin();
             return false;
         }
 
         currentUser.value = user;
         authState.value = "authenticated";
-        authMessage.value = `${user.displayName} でログイン中`;
         return true;
     } catch (error) {
         if (!mounted || currentGeneration !== authGeneration) return false;
 
         currentUser.value = undefined;
         authState.value = "error";
-        authMessage.value = "認証状態を取得できませんでした。時間をおいて再試行してください。";
         stopStream(true);
         connection.value = "closed";
         status.value = error instanceof Error ? error.message : "認証確認エラー";
@@ -240,12 +207,10 @@ async function handleStreamConnectionError() {
     try {
         const user = await fetchCurrentUser();
         if (!user) {
-            currentUser.value = undefined;
-            authState.value = "unauthenticated";
-            authMessage.value = "セッションの有効期限が切れました。再ログインしてください。";
             stopStream(true);
             connection.value = "closed";
             status.value = "セッション切れ";
+            beginLogin();
             return true;
         }
 
@@ -325,7 +290,6 @@ onMounted(() => {
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     if (isDemoMode) {
-        authMessage.value = "デモモードで接続中";
         connectStream();
         return;
     }
@@ -538,31 +502,12 @@ onBeforeUnmount(() => {
         </div>
 
         <div
-            v-if="showAuthCover"
-            class="auth-cover"
+            v-if="authState === 'error'"
+            class="render-error ui-panel"
         >
-            <div class="auth-cover__card ui-panel">
-                <p class="eyebrow">{{ accessLabel }}</p>
-                <h2>Live Stream Requires traQ Login</h2>
-                <p class="auth-cover__message">{{ authMessage }}</p>
-                <div class="auth-cover__actions">
-                    <button
-                        :disabled="authState === 'checking'"
-                        @click="handleLogin"
-                    >
-                        {{ authPrimaryLabel }}
-                    </button>
-                    <button
-                        class="auth-cover__secondary"
-                        @click="retryAuthentication"
-                    >
-                        再確認
-                    </button>
-                </div>
-                <p class="auth-cover__hint">
-                    URL に ?demo=1 を付けるとデモストリームへ接続できます。
-                </p>
-            </div>
+            <p class="eyebrow">AUTH ERROR</p>
+            <strong>認証状態を取得できませんでした</strong>
+            <button @click="retryAuthentication">再試行</button>
         </div>
 
         <div
@@ -615,7 +560,6 @@ onBeforeUnmount(() => {
                         <span class="session-pill__label">LOGGED IN</span>
                         <strong>{{ currentUser.displayName }}</strong>
                     </div>
-                    <button @click="handleLogout">LOG OUT</button>
                 </div>
             </div>
         </header>
