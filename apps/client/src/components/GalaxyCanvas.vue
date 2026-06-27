@@ -25,6 +25,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 
+import { audioManager } from "../audio/audioManager";
 import { calculateCameraAvoidance } from "../core/cameraAvoidance";
 import type { ChannelGraph } from "../core/channelGraph";
 import { NodeBuffer } from "../core/nodeBuffer";
@@ -488,7 +489,13 @@ function onPointerUp(event: PointerEvent) {
     if (pointerMoved || !renderer || !camera || !nodes) return;
     const bounds = renderer.domElement.getBoundingClientRect();
     const pickedId = pickNodeAt(event.clientX - bounds.left, event.clientY - bounds.top, bounds);
-    emit("select", pickedId === props.selectedId ? undefined : pickedId);
+    const nextSelectedId = pickedId === props.selectedId ? undefined : pickedId;
+
+    if (nextSelectedId && props.graph.get(nextSelectedId)?.children.length) {
+        audioManager.playBloom();
+    }
+
+    emit("select", nextSelectedId);
 }
 
 function pickNodeAt(x: number, y: number, bounds: DOMRect) {

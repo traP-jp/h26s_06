@@ -1,8 +1,9 @@
 import bgmUrl from "./bgm.mp3";
 import moveUrl from "./move.mp3";
 import postUrl from "./post.mp3";
+import bloomUrl from "./bloom.mp3";
 
-type SfxName = "post" | "move";
+type SfxName = "post" | "move" | "bloom";
 
 type StorageKeys = {
     muted: string;
@@ -76,22 +77,26 @@ class AudioManager {
         this.sfxPools = {
             post: this.createAudioPool(postUrl, 4),
             move: this.createAudioPool(moveUrl, 4),
+            bloom: this.createAudioPool(bloomUrl, 4),
         };
 
         this.lastPlayedAt = {
             post: 0,
             move: 0,
+            bloom: 0,
         };
 
         this.cooldownMs = {
             post: 100,
             move: 150,
+            bloom: 200,
         };
 
         this.maxActiveSfx = {
             total: 5,
             post: 3,
             move: 2,
+            bloom: 2,
         };
 
         this.applyMuted();
@@ -148,7 +153,7 @@ class AudioManager {
     }
 
     getAllAudioElements(): HTMLAudioElement[] {
-        return [this.bgm, ...this.sfxPools.post, ...this.sfxPools.move];
+        return [this.bgm, ...this.sfxPools.post, ...this.sfxPools.move, ...this.sfxPools.bloom];
     }
 
     applyMuted(): void {
@@ -165,7 +170,7 @@ class AudioManager {
 
         const targets = new Map<HTMLAudioElement, number>([
             [this.bgm, this.muted ? 0 : this.clampVolume(this.masterVolume * this.bgmVolume)],
-            ...[...this.sfxPools.post, ...this.sfxPools.move].map(
+            ...[...this.sfxPools.post, ...this.sfxPools.move, ...this.sfxPools.bloom].map(
                 audio =>
                     [
                         audio,
@@ -362,6 +367,10 @@ class AudioManager {
 
     playMove(): void {
         this.playSfx("move");
+    }
+
+    playBloom(): void {
+        this.playSfx("bloom");
     }
 }
 
