@@ -35,6 +35,39 @@ function createDenseChannels(): ChannelDictionary {
     return channels;
 }
 
+function createDeepChannels(): ChannelDictionary {
+    return {
+        grand_root: {
+            id: "grand_root",
+            parentId: "",
+            children: ["root"],
+            depth: 0,
+            islandId: -1,
+        },
+        root: {
+            id: "root",
+            parentId: "grand_root",
+            children: ["branch"],
+            depth: 1,
+            islandId: 0,
+        },
+        branch: {
+            id: "branch",
+            parentId: "root",
+            children: ["leaf"],
+            depth: 2,
+            islandId: 0,
+        },
+        leaf: {
+            id: "leaf",
+            parentId: "branch",
+            children: [],
+            depth: 3,
+            islandId: 0,
+        },
+    };
+}
+
 function emphasizedChildIds(graph: ChannelGraph) {
     return graph
         .get("dense")!
@@ -70,5 +103,16 @@ describe("ChannelGraph dense child emphasis", () => {
         graph.updateVisibility("dense");
 
         expect(emphasizedChildIds(graph)).toEqual(initial);
+    });
+});
+
+describe("ChannelGraph active visibility", () => {
+    test("activates hot channels at any depth", () => {
+        const graph = new ChannelGraph(createDeepChannels());
+        graph.get("leaf")!.relativeScore = 0.09;
+
+        graph.updateVisibility(undefined, 1);
+
+        expect(graph.get("leaf")!.isLayoutActive).toBe(true);
     });
 });

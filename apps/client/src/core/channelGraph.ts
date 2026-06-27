@@ -246,7 +246,7 @@ export class ChannelGraph {
             let shouldBeActive = false;
             if (node.depth < k) {
                 shouldBeActive = true;
-            } else if (node.depth === k && node.relativeScore > ACTIVE_RELATIVE_SCORE_THRESHOLD) {
+            } else if (node.relativeScore > ACTIVE_RELATIVE_SCORE_THRESHOLD) {
                 shouldBeActive = true;
             } else if (activePaths.has(node.id)) {
                 shouldBeActive = true;
@@ -306,7 +306,10 @@ export class ChannelGraph {
                 emphasizedIds.add(child.id);
             }
             for (const child of candidates) {
-                if (requiredIds.has(child.id) || child.relativeScore > ACTIVE_RELATIVE_SCORE_THRESHOLD) {
+                if (
+                    requiredIds.has(child.id) ||
+                    child.relativeScore > ACTIVE_RELATIVE_SCORE_THRESHOLD
+                ) {
                     emphasizedIds.add(child.id);
                 }
             }
