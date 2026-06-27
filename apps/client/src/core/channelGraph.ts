@@ -113,6 +113,34 @@ export class ChannelGraph {
         return result;
     }
 
+    navigationTargets(id: string, preferredChildId?: string) {
+        const node = this.get(id);
+        if (!node) {
+            return {};
+        }
+
+        const parent = node.parentId ? this.get(node.parentId) : undefined;
+        const children = this.sortedNodes(node.children);
+        const siblings = parent ? this.sortedNodes(parent.children) : [];
+        const siblingIndex = siblings.findIndex(sibling => sibling.id === node.id);
+        const preferredChild = preferredChildId
+            ? children.find(child => child.id === preferredChildId)
+            : undefined;
+
+        return {
+            parentId: parent?.id,
+            childId: preferredChild?.id ?? children[0]?.id,
+            previousSiblingId:
+                siblingIndex >= 0 && siblings.length > 1
+                    ? siblings[(siblingIndex - 1 + siblings.length) % siblings.length]?.id
+                    : undefined,
+            nextSiblingId:
+                siblingIndex >= 0 && siblings.length > 1
+                    ? siblings[(siblingIndex + 1) % siblings.length]?.id
+                    : undefined,
+        };
+    }
+
     applyTrigger(trigger: TriggerPayload) {
         const id = trigger.type === "msg" ? trigger.ch : trigger.to;
         let visibilityChanged = false;
@@ -405,6 +433,18 @@ export class ChannelGraph {
     private enqueueVisualEvent(event: VisualEvent) {
         if (this.visualEvents.length >= 128) this.visualEvents.shift();
         this.visualEvents.push(event);
+    }
+
+    private sortedNodes(indices: readonly number[]) {
+        return indices
+            .map(index => this.nodes[index])
+            .filter((node): node is ChannelNode => node !== undefined)
+            .toSorted((left, right) =>
+                left.name.localeCompare(right.name, undefined, {
+                    numeric: true,
+                    sensitivity: "base",
+                })
+            );
     }
 }
 

@@ -155,3 +155,40 @@ describe("ChannelGraph active visibility", () => {
         expect(graph.get("nested")!.visibilityAlpha).toBeGreaterThan(0);
     });
 });
+
+describe("ChannelGraph navigation targets", () => {
+    test("uses parent, first child, and cyclic alphabetic sibling order", () => {
+        const graph = new ChannelGraph(createDenseChannels());
+
+        expect(graph.navigationTargets("child-0")).toEqual({
+            parentId: "dense",
+            childId: undefined,
+            previousSiblingId: "child-59",
+            nextSiblingId: "child-1",
+        });
+        expect(graph.navigationTargets("child-1")).toEqual({
+            parentId: "dense",
+            childId: undefined,
+            previousSiblingId: "child-0",
+            nextSiblingId: "child-2",
+        });
+        expect(graph.navigationTargets("child-59")).toEqual({
+            parentId: "dense",
+            childId: undefined,
+            previousSiblingId: "child-58",
+            nextSiblingId: "child-0",
+        });
+        expect(graph.navigationTargets("dense")).toEqual({
+            parentId: "grand_root",
+            childId: "child-0",
+            previousSiblingId: undefined,
+            nextSiblingId: undefined,
+        });
+        expect(graph.navigationTargets("dense", "child-42")).toEqual({
+            parentId: "grand_root",
+            childId: "child-42",
+            previousSiblingId: undefined,
+            nextSiblingId: undefined,
+        });
+    });
+});

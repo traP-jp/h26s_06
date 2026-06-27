@@ -1,4 +1,4 @@
-import { computed, ref, shallowRef } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 
 import type { ChannelGraph } from "../core/channelGraph";
 import type { ConnectionState, TriggerPayload } from "../types/api";
@@ -14,6 +14,7 @@ export function useAppState() {
     const lastEvent = ref("初期データを待っています");
     const updatedAt = ref("");
     const renderError = ref<string>();
+    const rememberedChildByParent = ref<Record<string, string>>({});
 
     const selected = computed(() => {
         const channel = selectedId.value ? graph.value?.get(selectedId.value) : undefined;
@@ -27,6 +28,9 @@ export function useAppState() {
             ...channel,
             path: `# ${channelPath}`,
             pathHref: `https://q.trap.jp/channels/${channelPath.replaceAll(" / ", "/")}`,
+            navigation:
+                graph.value?.navigationTargets(channel.id, rememberedChildByParent.value[channel.id]) ??
+                {},
         };
     });
 
@@ -50,10 +54,22 @@ export function useAppState() {
     function resetActivity() {
         graph.value = undefined;
         selectedId.value = undefined;
+        rememberedChildByParent.value = {};
         eventCount.value = 0;
         lastEvent.value = "初期データを待っています";
         updatedAt.value = "";
     }
+
+    watch(selectedId, id => {
+        const node = id ? graph.value?.get(id) : undefined;
+        if (!node?.parentId) return;
+
+        if (rememberedChildByParent.value[node.parentId] === node.id) return;
+        rememberedChildByParent.value = {
+            ...rememberedChildByParent.value,
+            [node.parentId]: node.id,
+        };
+    });
 
     return {
         graph,
