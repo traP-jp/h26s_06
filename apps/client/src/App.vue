@@ -413,7 +413,7 @@ onBeforeUnmount(() => {
             <dl>
                 <div>
                     <dt>ACTIVITY</dt>
-                    <dd>{{ selected.currentScore.toFixed(1) }}</dd>
+                    <dd>{{ (selected.relativeScore * 100).toFixed(0) }}</dd>
                 </div>
                 <div>
                     <dt>DEPTH</dt>

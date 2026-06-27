@@ -20,12 +20,12 @@ export class NodeBuffer {
         for (let index = 0; index < nodes.length; index += 1) {
             const node = nodes[index];
             if (!node) continue;
-            const heat = node.currentScore / 100;
+            const heat = node.relativeScore;
             const pulse = heat > 0.72 ? Math.sin(now * 0.008) * 0.18 : 0;
             const selectedScale = node.id === selectedId ? 1.8 : 1;
             const visible =
                 !activeOnly ||
-                node.currentScore > 0.08 ||
+                node.relativeScore > 0.08 ||
                 node.id === "grand_root" ||
                 node.id === selectedId;
             const baseScale =
