@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand/v2"
 	"net/http"
 	"time"
@@ -64,6 +63,10 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	events := streamHub.subscribe()
 	defer streamHub.unsubscribe(events)
 
+	if !demo {
+		s.startLiveViewerPolling(liveChannels, streamState)
+	}
+
 	writeSSE(w, marshalEvent("status", map[string]string{"status": streamStatus(demo)}))
 	flusher.Flush()
 
@@ -72,9 +75,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if demo {
 		s.startDemoProducer()
 	} else {
-		poller := newViewerPoller(liveChannels, s.cfg.viewerChannelsPerTick)
-		go s.consumeTraqStream(ctx, token.AccessToken, liveChannelIDs, streamState, streamHub, poller)
-		go s.consumeViewerSnapshots(ctx, token.AccessToken, poller, streamHub)
+		go s.consumeTraqStream(ctx, token.AccessToken, liveChannelIDs, streamState, streamHub)
 	}
 
 	syncTicker := time.NewTicker(s.cfg.syncInterval)
@@ -174,7 +175,7 @@ func (s *server) runDemoProducer(ctx context.Context, state *stateManager, hub *
 	}
 }
 
-func (s *server) consumeTraqStream(ctx context.Context, accessToken string, activeChannelIDs map[string]bool, state *stateManager, hub *eventHub, poller *viewerPoller) {
+func (s *server) consumeTraqStream(ctx context.Context, accessToken string, activeChannelIDs map[string]bool, state *stateManager, hub *eventHub) {
 	triggers, errs := s.streamTraqTriggers(ctx, accessToken)
 	for {
 		select {
@@ -188,13 +189,10 @@ func (s *server) consumeTraqStream(ctx context.Context, accessToken string, acti
 				}
 				continue
 			}
-			applied, published := s.publishTrigger(trigger, activeChannelIDs, state, hub)
-			if published && applied.Type == "msg" {
-				poller.noteMessage(applied.Ch)
-			}
+			s.publishTrigger(trigger, activeChannelIDs, state, hub)
 		case err, ok := <-errs:
 			if ok && err != nil && ctx.Err() == nil {
-				log.Printf("traQ stream stopped: %v", err)
+				traqLogError("ws stream stopped: %v", err)
 				hub.publish(marshalEvent("stream-error", map[string]string{"error": err.Error()}))
 			}
 			return
@@ -202,8 +200,9 @@ func (s *server) consumeTraqStream(ctx context.Context, accessToken string, acti
 	}
 }
 
-func (s *server) consumeViewerSnapshots(ctx context.Context, accessToken string, poller *viewerPoller, hub *eventHub) {
-	for snapshot := range s.streamViewerSnapshots(ctx, accessToken, poller) {
+func (s *server) consumeViewerSnapshots(ctx context.Context, accessToken string, channels []traqChannel, state *stateManager, hub *eventHub) {
+	poller := newViewerPoller(channels, s.cfg.viewerChannelsPerTick, state)
+	for snapshot := range s.streamViewerSnapshots(ctx, accessToken, poller, hub) {
 		hub.publish(marshalEvent("viewers", snapshot))
 	}
 }

@@ -2,7 +2,7 @@ package main
 
 import "testing"
 
-func TestPublishTriggerReturnsAppliedMessageForViewerWeighting(t *testing.T) {
+func TestPublishTriggerReturnsAppliedMessageForViewerSampling(t *testing.T) {
 	state, err := newStateManagerFromTraq([]traqChannel{{ID: "active", Name: "active"}})
 	if err != nil {
 		t.Fatalf("newStateManagerFromTraq returned error: %v", err)
@@ -11,7 +11,6 @@ func TestPublishTriggerReturnsAppliedMessageForViewerWeighting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newServer returned error: %v", err)
 	}
-	poller := newViewerPoller([]traqChannel{{ID: "active", Name: "active"}}, 1)
 
 	applied, published := srv.publishTrigger(
 		triggerPayload{Type: "msg", Ch: "active"},
@@ -26,13 +25,11 @@ func TestPublishTriggerReturnsAppliedMessageForViewerWeighting(t *testing.T) {
 		t.Fatalf("applied trigger = %#v, want msg active", applied)
 	}
 
-	poller.noteMessage(applied.Ch)
-
-	poller.mu.Lock()
-	weight := poller.messageWeight["active"]
-	poller.mu.Unlock()
-	if weight == 0 {
-		t.Fatal("message weight was not updated")
+	state.mu.RLock()
+	score := state.channels["active"].Score
+	state.mu.RUnlock()
+	if score == 0 {
+		t.Fatal("message score was not updated for viewer sampling")
 	}
 }
 

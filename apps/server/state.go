@@ -59,7 +59,8 @@ func newDemoStateManager() (*stateManager, error) {
 		}
 	}
 
-	sm := &stateManager{channels: channels, users: map[string]*userState{}}
+	prepareChannelTimes(channels, now)
+	sm := &stateManager{channels: channels, users: map[string]*userState{}, seenMessageIDs: map[string]struct{}{}}
 	if err := sm.rebuildInitJSONLocked(); err != nil {
 		return nil, err
 	}
@@ -117,7 +118,8 @@ func newStateManagerFromTraq(channels []traqChannel) (*stateManager, error) {
 		assignLayout(nodes, rootID, islandID, 1)
 	}
 
-	sm := &stateManager{channels: nodes, users: map[string]*userState{}}
+	prepareChannelTimes(nodes, now)
+	sm := &stateManager{channels: nodes, users: map[string]*userState{}, seenMessageIDs: map[string]struct{}{}}
 	if err := sm.rebuildInitJSONLocked(); err != nil {
 		return nil, err
 	}
@@ -136,6 +138,17 @@ func assignLayout(channels map[string]*channel, id string, islandID int, depth i
 	}
 }
 
+func prepareChannelTimes(channels map[string]*channel, now time.Time) {
+	for _, ch := range channels {
+		if ch.LastSyncTime.IsZero() {
+			ch.LastSyncTime = now
+		}
+		if ch.LastDecayTime.IsZero() {
+			ch.LastDecayTime = now
+		}
+	}
+}
+
 func (sm *stateManager) initPayloadBytes() []byte {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -150,6 +163,12 @@ func (sm *stateManager) applyTrigger(trigger triggerPayload) (triggerPayload, bo
 	case "msg":
 		if trigger.Ch == "" || sm.channels[trigger.Ch] == nil {
 			return trigger, false
+		}
+		if trigger.MessageID != "" {
+			if _, ok := sm.seenMessageIDs[trigger.MessageID]; ok {
+				return trigger, false
+			}
+			sm.rememberMessageIDLocked(trigger.MessageID)
 		}
 		sm.addScoreLocked(trigger.Ch, 46)
 		return trigger, true
@@ -200,6 +219,18 @@ func (sm *stateManager) applyTrigger(trigger triggerPayload) (triggerPayload, bo
 	}
 }
 
+func (sm *stateManager) rememberMessageIDLocked(messageID string) {
+	sm.seenMessageIDs[messageID] = struct{}{}
+	sm.recentMessageIDs = append(sm.recentMessageIDs, messageID)
+	if len(sm.recentMessageIDs) <= recentMessageIDLimit {
+		return
+	}
+	evicted := sm.recentMessageIDs[0]
+	copy(sm.recentMessageIDs, sm.recentMessageIDs[1:])
+	sm.recentMessageIDs = sm.recentMessageIDs[:len(sm.recentMessageIDs)-1]
+	delete(sm.seenMessageIDs, evicted)
+}
+
 func (sm *stateManager) addScoreLocked(channelID string, amount float64) {
 	for depth := 0; channelID != ""; depth++ {
 		ch := sm.channels[channelID]
@@ -216,20 +247,73 @@ func (sm *stateManager) syncPayload() syncPayload {
 	defer sm.mu.Unlock()
 
 	now := time.Now()
-	deltas := make(map[string]float64)
+	weighted := make([]weightedChannel, 0, len(sm.channels))
 	for _, ch := range sm.channels {
-		elapsed := now.Sub(ch.LastSyncTime).Seconds()
-		ch.Score *= math.Exp(-elapsed / 24)
-
-		deltaScore := math.Abs(ch.Score - ch.LastSyncScore)
-		probability := math.Min(1, 0.22*deltaScore+0.002*elapsed)
-		if rand.Float64() < probability || (ch.Score > 0.1 && elapsed >= 30) {
-			deltas[ch.ID] = math.Round(ch.Score*10) / 10
-			ch.LastSyncScore = ch.Score
-			ch.LastSyncTime = now
+		decayElapsed := now.Sub(ch.LastDecayTime).Seconds()
+		if decayElapsed > 0 {
+			ch.Score *= math.Exp(-decayElapsed / 24)
 		}
+		ch.LastDecayTime = now
+
+		elapsed := now.Sub(ch.LastSyncTime).Seconds()
+		deltaScore := math.Abs(ch.Score - ch.LastSyncScore)
+		weight := syncPayloadWeight(deltaScore, elapsed)
+		weighted = append(weighted, weightedChannel{id: ch.ID, rawWeight: weight})
+	}
+
+	deltas := make(map[string]float64)
+	for _, selected := range selectWeightedChannels(weighted, maxSyncPayloadDeltas) {
+		ch := sm.channels[selected.id]
+		if ch == nil {
+			continue
+		}
+		deltas[ch.ID] = math.Round(ch.Score*10) / 10
+		ch.LastSyncScore = ch.Score
+		ch.LastSyncTime = now
 	}
 	return syncPayload{TS: now.Unix(), Deltas: deltas}
+}
+
+func syncPayloadWeight(deltaScore float64, elapsedSeconds float64) float64 {
+	return 0.22*deltaScore + 0.002*elapsedSeconds
+}
+
+func (sm *stateManager) sampleViewerChannels(candidates []traqChannel, maxChannels int) []traqChannel {
+	if maxChannels <= 0 || len(candidates) == 0 {
+		return nil
+	}
+
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	now := time.Now()
+	weighted := make([]weightedChannel, 0, len(candidates))
+	for _, candidate := range candidates {
+		ch := sm.channels[candidate.ID]
+		if ch == nil {
+			continue
+		}
+		probability := 1.0
+		if !ch.LastViewTime.IsZero() {
+			elapsed := now.Sub(ch.LastViewTime).Seconds()
+			probability = viewerPollWeight(ch.Score, elapsed)
+		}
+		weighted = append(weighted, weightedChannel{id: candidate.ID, channel: candidate, rawWeight: probability})
+	}
+
+	selected := selectWeightedChannels(weighted, maxChannels)
+	channels := make([]traqChannel, 0, len(selected))
+	for _, selectedChannel := range selected {
+		if ch := sm.channels[selectedChannel.id]; ch != nil {
+			ch.LastViewTime = now
+		}
+		channels = append(channels, selectedChannel.channel)
+	}
+	return channels
+}
+
+func viewerPollWeight(score float64, elapsedSeconds float64) float64 {
+	return 0.01*score + 0.001*elapsedSeconds
 }
 
 func (sm *stateManager) randomLeafID() string {
