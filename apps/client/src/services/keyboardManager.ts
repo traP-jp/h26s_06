@@ -21,7 +21,6 @@ interface KeyboardManagerOptions {
 
     onMuteToggle?: () => void;
     onSettingsClose?: () => void;
-    onSettingsToggle?: () => void;
 }
 
 const ARROW_TO_TARGET = {
@@ -40,18 +39,17 @@ export function useKeyboardManager({
     settingsOpen,
     onMuteToggle,
     onSettingsClose,
-    onSettingsToggle,
 }: KeyboardManagerOptions): void {
     function handleKeyDown(event: KeyboardEvent): void {
         if (event.key === "Escape") {
-            event.preventDefault();
+            if (settingsOpen?.value) {
+                event.preventDefault();
 
-            if (onSettingsToggle) {
-                onSettingsToggle();
-            } else if (settingsOpen) {
-                settingsOpen.value = !settingsOpen.value;
-            } else if (onSettingsClose) {
-                onSettingsClose();
+                if (onSettingsClose) {
+                    onSettingsClose();
+                } else {
+                    settingsOpen.value = false;
+                }
             }
 
             return;
