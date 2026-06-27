@@ -88,6 +88,9 @@ func TestHandleStatusClearsCurrentChannel(t *testing.T) {
 		t.Fatalf("select status = %d, want %d body=%q", selectRec.Code, http.StatusNoContent, selectRec.Body.String())
 	}
 
+	signals := srv.viewerHub.subscribe()
+	defer srv.viewerHub.unsubscribe(signals)
+
 	clearReq := httptest.NewRequest(http.MethodPut, "/api/status", strings.NewReader(`{"channel":""}`))
 	clearReq.Header.Set("Content-Type", "application/json")
 	clearReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
@@ -100,6 +103,7 @@ func TestHandleStatusClearsCurrentChannel(t *testing.T) {
 	if got := srv.liveData.State.currentChannel("user-a"); got != "" {
 		t.Fatalf("CurrentChannel = %q, want empty", got)
 	}
+	assertNoViewerSignal(t, signals)
 }
 
 func TestHandleStatusRequiresAuthentication(t *testing.T) {
@@ -166,5 +170,17 @@ func TestHandleStatusRejectsUnknownChannel(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func assertNoViewerSignal(t *testing.T, signals <-chan viewerSignal) {
+	t.Helper()
+	select {
+	case signal, ok := <-signals:
+		if !ok {
+			t.Fatal("viewer signal channel was closed")
+		}
+		t.Fatalf("unexpected viewer signal: %#v", signal)
+	case <-time.After(20 * time.Millisecond):
 	}
 }

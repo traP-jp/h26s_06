@@ -189,7 +189,6 @@ func TestStreamCurrentViewerEventsDoesNotEmitAfterStatusClear(t *testing.T) {
 	if !state.clearUserStatus("current-user") {
 		t.Fatal("clearUserStatus returned false")
 	}
-	srv.viewerHub.publish(viewerSignal{})
 	srv.viewerHub.publish(viewerSignal{ChannelID: "general"})
 
 	assertNoViewerEvent(t, events)
