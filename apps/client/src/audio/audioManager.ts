@@ -1,9 +1,10 @@
 import bgmUrl from "./bgm.mp3";
+import bloomUrl from "./bloom.mp3";
 import moveUrl from "./move.mp3";
 import postUrl from "./post.mp3";
-import bloomUrl from "./bloom.mp3";
 
 type SfxName = "post" | "move" | "bloom";
+type AudioName = "bgm" | SfxName;
 
 type StorageKeys = {
     muted: string;
@@ -38,8 +39,15 @@ const DEFAULT_SETTINGS: AudioSettings = {
     muted: false,
     masterVolume: 0.5,
     bgmVolume: 0.3,
-    sfxVolume: 0.1,
+    sfxVolume: 0.4,
 };
+
+const AUDIO_VOLUME_MULTIPLIERS = {
+    bgm: 1.0,
+    post: 0.5,
+    move: 1.0,
+    bloom: 2.5,
+} as const satisfies Record<AudioName, number>;
 
 const VOLUME_FADE_DURATION_MS = 600;
 
@@ -162,21 +170,28 @@ class AudioManager {
         }
     }
 
+    getTargetVolume(categoryVolume: number, audioName: AudioName): number {
+        if (this.muted) return 0;
+
+        return this.clampVolume(
+            this.masterVolume * categoryVolume * AUDIO_VOLUME_MULTIPLIERS[audioName]
+        );
+    }
+
     applyVolumes(durationMs = 0): void {
         if (this.volumeAnimationFrame !== undefined) {
             cancelAnimationFrame(this.volumeAnimationFrame);
             this.volumeAnimationFrame = undefined;
         }
 
+        const sfxTargets = (Object.keys(this.sfxPools) as SfxName[]).flatMap(name =>
+            this.sfxPools[name].map(
+                audio => [audio, this.getTargetVolume(this.sfxVolume, name)] as const
+            )
+        );
         const targets = new Map<HTMLAudioElement, number>([
-            [this.bgm, this.muted ? 0 : this.clampVolume(this.masterVolume * this.bgmVolume)],
-            ...[...this.sfxPools.post, ...this.sfxPools.move, ...this.sfxPools.bloom].map(
-                audio =>
-                    [
-                        audio,
-                        this.muted ? 0 : this.clampVolume(this.masterVolume * this.sfxVolume),
-                    ] as const
-            ),
+            [this.bgm, this.getTargetVolume(this.bgmVolume, "bgm")],
+            ...sfxTargets,
         ]);
 
         if (durationMs <= 0) {

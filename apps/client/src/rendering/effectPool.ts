@@ -14,6 +14,7 @@ import {
     Vector3,
 } from "three";
 
+import { audioManager } from "../audio/audioManager";
 import type { ChannelGraph, ChannelNode, VisualEvent } from "../core/channelGraph";
 
 interface TimedEffect {
@@ -27,6 +28,7 @@ interface RippleEffect extends TimedEffect {
     mesh: Mesh<RingGeometry, MeshBasicMaterial>;
     baseScale: number;
     nodeId?: string;
+    playPostOnStart: boolean;
 }
 
 interface BeamEffect extends TimedEffect {
@@ -119,6 +121,8 @@ export class EffectPool {
     private playMessage(channelId: string, now: number) {
         const path = this.graph.path(channelId);
         if (path.length === 0) return;
+        audioManager.playMove();
+
         const pulse = acquire(this.pulses);
         pulse.active = true;
         pulse.startedAt = now;
@@ -136,6 +140,7 @@ export class EffectPool {
             ripple.delay = pulse.duration + index * 115;
             ripple.baseScale = node.depth <= 1 ? 7 : 4.5;
             ripple.nodeId = node.id;
+            ripple.playPostOnStart = index === 0;
             ripple.mesh.position.copy(getNodePosition(node, now));
             ripple.mesh.material.color.set(node.color);
             ripple.mesh.visible = false;
@@ -173,6 +178,10 @@ export class EffectPool {
                 ripple.active = false;
                 ripple.mesh.visible = false;
                 continue;
+            }
+            if (ripple.playPostOnStart) {
+                ripple.playPostOnStart = false;
+                audioManager.playPost();
             }
             if (ripple.nodeId) {
                 const node = this.graph.get(ripple.nodeId);
@@ -253,7 +262,15 @@ function createRipple(scene: Scene): RippleEffect {
     );
     mesh.visible = false;
     scene.add(mesh);
-    return { mesh, active: false, startedAt: 0, duration: 0, delay: 0, baseScale: 1 };
+    return {
+        mesh,
+        active: false,
+        startedAt: 0,
+        duration: 0,
+        delay: 0,
+        baseScale: 1,
+        playPostOnStart: false,
+    };
 }
 
 function createBeam(scene: Scene): BeamEffect {
