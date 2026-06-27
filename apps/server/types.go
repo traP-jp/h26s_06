@@ -14,6 +14,7 @@ const (
 	clientEventQueueSize = 64
 	recentMessageIDLimit = 100
 	maxSyncPayloadDeltas = 100
+	userBotCacheLimit    = 1500
 )
 
 type server struct {
@@ -23,6 +24,9 @@ type server struct {
 	authMu   sync.Mutex
 	states   map[string]time.Time
 	sessions map[string]tokenResponse
+
+	userBotMu    sync.Mutex
+	userBotCache map[string]bool
 
 	liveMu    sync.Mutex
 	liveReady bool

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -169,12 +170,57 @@ func (s *server) fetchMessageInfo(ctx context.Context, accessToken string, messa
 		return "", false, fmt.Errorf("message endpoint returned empty userId for %s", messageID)
 	}
 
+	if isBot, ok := s.cachedUserIsBot(message.UserID); ok {
+		traqLogOK("GET /api/v3/messages/%s -> %s channelID=%s userID=%s bot=%t botCache=hit", messageID, resp.Status, message.ChannelID, message.UserID, isBot)
+		return message.ChannelID, isBot, nil
+	}
+
 	isBot, err := s.fetchUserIsBot(ctx, accessToken, message.UserID)
 	if err != nil {
 		return "", false, err
 	}
-	traqLogOK("GET /api/v3/messages/%s -> %s channelID=%s userID=%s bot=%t", messageID, resp.Status, message.ChannelID, message.UserID, isBot)
+	s.storeUserIsBot(message.UserID, isBot)
+	traqLogOK("GET /api/v3/messages/%s -> %s channelID=%s userID=%s bot=%t botCache=miss", messageID, resp.Status, message.ChannelID, message.UserID, isBot)
 	return message.ChannelID, isBot, nil
+}
+
+func (s *server) cachedUserIsBot(userID string) (bool, bool) {
+	s.userBotMu.Lock()
+	defer s.userBotMu.Unlock()
+
+	isBot, ok := s.userBotCache[userID]
+	if !ok {
+		return false, false
+	}
+	return isBot, true
+}
+
+func (s *server) storeUserIsBot(userID string, isBot bool) {
+	s.userBotMu.Lock()
+	defer s.userBotMu.Unlock()
+
+	if s.userBotCache == nil {
+		s.userBotCache = map[string]bool{}
+	}
+	if _, ok := s.userBotCache[userID]; !ok && len(s.userBotCache) >= userBotCacheLimit {
+		s.evictRandomUserBotLocked()
+	}
+	s.userBotCache[userID] = isBot
+}
+
+func (s *server) evictRandomUserBotLocked() {
+	if len(s.userBotCache) == 0 {
+		return
+	}
+	target := rand.Intn(len(s.userBotCache))
+	i := 0
+	for userID := range s.userBotCache {
+		if i == target {
+			delete(s.userBotCache, userID)
+			return
+		}
+		i++
+	}
 }
 
 func (s *server) fetchUserIsBot(ctx context.Context, accessToken string, userID string) (bool, error) {
