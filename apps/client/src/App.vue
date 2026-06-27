@@ -48,8 +48,7 @@ const showLoading = computed(() => authState.value !== "error" && !graph.value);
 const muted = ref(audioManager.muted);
 const masterVolume = ref(audioManager.masterVolume);
 const bgmVolume = ref(audioManager.bgmVolume);
-const postVolume = ref(audioManager.postVolume);
-const moveVolume = ref(audioManager.moveVolume);
+const sfxVolume = ref(audioManager.sfxVolume);
 
 // settings drawer
 const settingsOpen = ref(false);
@@ -115,20 +114,12 @@ function changeBgmVolume(event: Event): void {
     audioManager.setBgmVolume(value);
 }
 
-function changePostVolume(event: Event): void {
+function changeSfxVolume(event: Event): void {
     const target = event.target as HTMLInputElement;
     const value = Number(target.value);
 
-    postVolume.value = value;
-    audioManager.setPostVolume(value);
-}
-
-function changeMoveVolume(event: Event): void {
-    const target = event.target as HTMLInputElement;
-    const value = Number(target.value);
-
-    moveVolume.value = value;
-    audioManager.setMoveVolume(value);
+    sfxVolume.value = value;
+    audioManager.setSfxVolume(value);
 }
 
 function resetAudioSettings(): void {
@@ -137,18 +128,7 @@ function resetAudioSettings(): void {
     muted.value = audioManager.muted;
     masterVolume.value = audioManager.masterVolume;
     bgmVolume.value = audioManager.bgmVolume;
-    postVolume.value = audioManager.postVolume;
-    moveVolume.value = audioManager.moveVolume;
-}
-
-function onPost(): void {
-    audioManager.unlock({ startBgm: false });
-    audioManager.playPost();
-}
-
-function onMove(): void {
-    audioManager.unlock({ startBgm: false });
-    audioManager.playMove();
+    sfxVolume.value = audioManager.sfxVolume;
 }
 
 async function retryAuthentication() {
@@ -338,7 +318,14 @@ onBeforeUnmount(() => {
             aria-label="音声設定を開く"
             @click.stop="openSettings"
         >
-            ⚙
+            <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+            >
+                <path
+                    d="M12 15.25A3.25 3.25 0 1 0 12 8.75a3.25 3.25 0 0 0 0 6.5Zm7.2-3.25c0-.45-.05-.88-.13-1.3l2-1.55-2-3.46-2.47 1a8.12 8.12 0 0 0-2.25-1.3L14 2.75h-4l-.35 2.64A8.12 8.12 0 0 0 7.4 6.7l-2.47-1-2 3.46 2 1.55a7.16 7.16 0 0 0 0 2.6l-2 1.55 2 3.46 2.47-1a8.12 8.12 0 0 0 2.25 1.3l.35 2.64h4l.35-2.64a8.12 8.12 0 0 0 2.25-1.3l2.47 1 2-3.46-2-1.55c.08-.42.13-.85.13-1.3Z"
+                />
+            </svg>
         </button>
 
         <Transition name="settings-fade">
@@ -383,7 +370,20 @@ onBeforeUnmount(() => {
                             :checked="muted"
                             @change="changeMuted"
                         />
-                        <span>ミュート</span>
+                        <span
+                            class="settingsToggleIcon"
+                            aria-hidden="true"
+                        >
+                            <svg viewBox="0 0 24 24">
+                                <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+                                <path d="m17 9 4 4m0-4-4 4" />
+                            </svg>
+                        </span>
+                        <span class="settingsToggleLabel">ミュート</span>
+                        <span
+                            class="settingsToggleSwitch"
+                            aria-hidden="true"
+                        />
                     </label>
                 </section>
 
@@ -392,7 +392,16 @@ onBeforeUnmount(() => {
 
                     <div class="volumeControl">
                         <div class="volumeLabel">
-                            <label for="master-volume">全体音量</label>
+                            <label for="master-volume">
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                >
+                                    <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+                                    <path d="M16 9.5a4 4 0 0 1 0 5m2.5-7.5a7 7 0 0 1 0 10" />
+                                </svg>
+                                全体音量
+                            </label>
                             <output> {{ Math.round(masterVolume * 100) }}% </output>
                         </div>
                         <input
@@ -402,13 +411,32 @@ onBeforeUnmount(() => {
                             max="1"
                             step="0.01"
                             :value="masterVolume"
+                            :style="{ '--range-progress': `${masterVolume * 100}%` }"
                             @input="changeMasterVolume"
                         />
                     </div>
 
                     <div class="volumeControl">
                         <div class="volumeLabel">
-                            <label for="bgm-volume">BGM</label>
+                            <label for="bgm-volume">
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                >
+                                    <path d="M9 18V6l10-2v12" />
+                                    <circle
+                                        cx="6"
+                                        cy="18"
+                                        r="3"
+                                    />
+                                    <circle
+                                        cx="16"
+                                        cy="16"
+                                        r="3"
+                                    />
+                                </svg>
+                                BGM
+                            </label>
                             <output> {{ Math.round(bgmVolume * 100) }}% </output>
                         </div>
                         <input
@@ -418,39 +446,34 @@ onBeforeUnmount(() => {
                             max="1"
                             step="0.01"
                             :value="bgmVolume"
+                            :style="{ '--range-progress': `${bgmVolume * 100}%` }"
                             @input="changeBgmVolume"
                         />
                     </div>
 
                     <div class="volumeControl">
                         <div class="volumeLabel">
-                            <label for="post-volume">投稿音</label>
-                            <output> {{ Math.round(postVolume * 100) }}% </output>
+                            <label for="sfx-volume">
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                >
+                                    <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+                                    <path d="m17 9 4 4m0-4-4 4" />
+                                </svg>
+                                SE
+                            </label>
+                            <output> {{ Math.round(sfxVolume * 100) }}% </output>
                         </div>
                         <input
-                            id="post-volume"
+                            id="sfx-volume"
                             type="range"
                             min="0"
                             max="1"
                             step="0.01"
-                            :value="postVolume"
-                            @input="changePostVolume"
-                        />
-                    </div>
-
-                    <div class="volumeControl">
-                        <div class="volumeLabel">
-                            <label for="move-volume">移動音</label>
-                            <output> {{ Math.round(moveVolume * 100) }}% </output>
-                        </div>
-                        <input
-                            id="move-volume"
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.01"
-                            :value="moveVolume"
-                            @input="changeMoveVolume"
+                            :value="sfxVolume"
+                            :style="{ '--range-progress': `${sfxVolume * 100}%` }"
+                            @input="changeSfxVolume"
                         />
                     </div>
 
@@ -461,24 +484,6 @@ onBeforeUnmount(() => {
                     >
                         初期値に戻す
                     </button>
-                </section>
-
-                <section class="settingsGroup">
-                    <h3>テスト再生</h3>
-                    <div class="soundTestButtons">
-                        <button
-                            type="button"
-                            @click="onPost"
-                        >
-                            投稿音
-                        </button>
-                        <button
-                            type="button"
-                            @click="onMove"
-                        >
-                            移動音
-                        </button>
-                    </div>
                 </section>
             </aside>
         </Transition>

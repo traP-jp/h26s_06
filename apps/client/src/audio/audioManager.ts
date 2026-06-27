@@ -1,6 +1,6 @@
 import bgmUrl from "./bgm.mp3";
-import postUrl from "./post.mp3";
 import moveUrl from "./move.mp3";
+import postUrl from "./post.mp3";
 
 type SfxName = "post" | "move";
 
@@ -8,16 +8,14 @@ type StorageKeys = {
     muted: string;
     masterVolume: string;
     bgmVolume: string;
-    postVolume: string;
-    moveVolume: string;
+    sfxVolume: string;
 };
 
 type AudioSettings = {
     muted: boolean;
     masterVolume: number;
     bgmVolume: number;
-    postVolume: number;
-    moveVolume: number;
+    sfxVolume: number;
 };
 
 type UnlockOptions = {
@@ -32,16 +30,14 @@ const STORAGE_KEYS: StorageKeys = {
     muted: "audio-muted",
     masterVolume: "audio-master-volume",
     bgmVolume: "audio-bgm-volume",
-    postVolume: "audio-post-volume",
-    moveVolume: "audio-move-volume",
+    sfxVolume: "audio-sfx-volume",
 };
 
 const DEFAULT_SETTINGS: AudioSettings = {
     muted: false,
     masterVolume: 0.5,
     bgmVolume: 0.3,
-    postVolume: 0.1,
-    moveVolume: 0.1,
+    sfxVolume: 0.1,
 };
 
 class AudioManager {
@@ -50,8 +46,7 @@ class AudioManager {
     public muted: boolean;
     public masterVolume: number;
     public bgmVolume: number;
-    public postVolume: number;
-    public moveVolume: number;
+    public sfxVolume: number;
 
     private bgm: HTMLAudioElement;
     private sfxPools: Record<SfxName, HTMLAudioElement[]>;
@@ -62,30 +57,16 @@ class AudioManager {
     constructor() {
         this.unlocked = false;
 
-        this.muted = this.loadBoolean(
-            STORAGE_KEYS.muted,
-            DEFAULT_SETTINGS.muted,
-        );
+        this.muted = this.loadBoolean(STORAGE_KEYS.muted, DEFAULT_SETTINGS.muted);
 
         this.masterVolume = this.loadVolume(
             STORAGE_KEYS.masterVolume,
-            DEFAULT_SETTINGS.masterVolume,
+            DEFAULT_SETTINGS.masterVolume
         );
 
-        this.bgmVolume = this.loadVolume(
-            STORAGE_KEYS.bgmVolume,
-            DEFAULT_SETTINGS.bgmVolume,
-        );
+        this.bgmVolume = this.loadVolume(STORAGE_KEYS.bgmVolume, DEFAULT_SETTINGS.bgmVolume);
 
-        this.postVolume = this.loadVolume(
-            STORAGE_KEYS.postVolume,
-            DEFAULT_SETTINGS.postVolume,
-        );
-
-        this.moveVolume = this.loadVolume(
-            STORAGE_KEYS.moveVolume,
-            DEFAULT_SETTINGS.moveVolume,
-        );
+        this.sfxVolume = this.loadVolume(STORAGE_KEYS.sfxVolume, DEFAULT_SETTINGS.sfxVolume);
 
         this.bgm = this.createAudio(bgmUrl, { loop: true });
 
@@ -117,8 +98,7 @@ class AudioManager {
             muted: this.muted,
             masterVolume: this.masterVolume,
             bgmVolume: this.bgmVolume,
-            postVolume: this.postVolume,
-            moveVolume: this.moveVolume,
+            sfxVolume: this.sfxVolume,
         });
     }
 
@@ -152,24 +132,20 @@ class AudioManager {
         return Math.max(0, Math.min(1, Number(value)));
     }
 
-    createAudio(src: string, options: AudioOptions = {}): HTMLAudioElement {
-        const audio = new Audio(src);
+    createAudio(source: string, options: AudioOptions = {}): HTMLAudioElement {
+        const audio = new Audio(source);
         audio.preload = "auto";
         audio.loop = Boolean(options.loop);
         audio.muted = this.muted;
         return audio;
     }
 
-    createAudioPool(src: string, size: number): HTMLAudioElement[] {
-        return Array.from({ length: size }, () => this.createAudio(src));
+    createAudioPool(source: string, size: number): HTMLAudioElement[] {
+        return Array.from({ length: size }, () => this.createAudio(source));
     }
 
     getAllAudioElements(): HTMLAudioElement[] {
-        return [
-            this.bgm,
-            ...this.sfxPools.post,
-            ...this.sfxPools.move,
-        ];
+        return [this.bgm, ...this.sfxPools.post, ...this.sfxPools.move];
     }
 
     applyMuted(): void {
@@ -179,20 +155,10 @@ class AudioManager {
     }
 
     applyVolumes(): void {
-        this.bgm.volume = this.clampVolume(
-            this.masterVolume * this.bgmVolume,
-        );
+        this.bgm.volume = this.clampVolume(this.masterVolume * this.bgmVolume);
 
-        for (const audio of this.sfxPools.post) {
-            audio.volume = this.clampVolume(
-                this.masterVolume * this.postVolume,
-            );
-        }
-
-        for (const audio of this.sfxPools.move) {
-            audio.volume = this.clampVolume(
-                this.masterVolume * this.moveVolume,
-            );
+        for (const audio of [...this.sfxPools.post, ...this.sfxPools.move]) {
+            audio.volume = this.clampVolume(this.masterVolume * this.sfxVolume);
         }
     }
 
@@ -241,60 +207,32 @@ class AudioManager {
 
     setMasterVolume(volume: number): void {
         this.masterVolume = this.clampVolume(volume);
-        localStorage.setItem(
-            STORAGE_KEYS.masterVolume,
-            String(this.masterVolume),
-        );
+        localStorage.setItem(STORAGE_KEYS.masterVolume, String(this.masterVolume));
         this.applyVolumes();
     }
 
     setBgmVolume(volume: number): void {
         this.bgmVolume = this.clampVolume(volume);
-        localStorage.setItem(
-            STORAGE_KEYS.bgmVolume,
-            String(this.bgmVolume),
-        );
-        this.applyVolumes();
-    }
-
-    setPostVolume(volume: number): void {
-        this.postVolume = this.clampVolume(volume);
-        localStorage.setItem(
-            STORAGE_KEYS.postVolume,
-            String(this.postVolume),
-        );
-        this.applyVolumes();
-    }
-
-    setMoveVolume(volume: number): void {
-        this.moveVolume = this.clampVolume(volume);
-        localStorage.setItem(
-            STORAGE_KEYS.moveVolume,
-            String(this.moveVolume),
-        );
+        localStorage.setItem(STORAGE_KEYS.bgmVolume, String(this.bgmVolume));
         this.applyVolumes();
     }
 
     setSfxVolume(volume: number): void {
-        this.setPostVolume(volume);
-        this.setMoveVolume(volume);
+        this.sfxVolume = this.clampVolume(volume);
+        localStorage.setItem(STORAGE_KEYS.sfxVolume, String(this.sfxVolume));
+        this.applyVolumes();
     }
 
     resetSettings(): void {
         this.muted = DEFAULT_SETTINGS.muted;
         this.masterVolume = DEFAULT_SETTINGS.masterVolume;
         this.bgmVolume = DEFAULT_SETTINGS.bgmVolume;
-        this.postVolume = DEFAULT_SETTINGS.postVolume;
-        this.moveVolume = DEFAULT_SETTINGS.moveVolume;
+        this.sfxVolume = DEFAULT_SETTINGS.sfxVolume;
 
         localStorage.setItem(STORAGE_KEYS.muted, String(this.muted));
-        localStorage.setItem(
-            STORAGE_KEYS.masterVolume,
-            String(this.masterVolume),
-        );
+        localStorage.setItem(STORAGE_KEYS.masterVolume, String(this.masterVolume));
         localStorage.setItem(STORAGE_KEYS.bgmVolume, String(this.bgmVolume));
-        localStorage.setItem(STORAGE_KEYS.postVolume, String(this.postVolume));
-        localStorage.setItem(STORAGE_KEYS.moveVolume, String(this.moveVolume));
+        localStorage.setItem(STORAGE_KEYS.sfxVolume, String(this.sfxVolume));
 
         this.applyMuted();
         this.applyVolumes();
@@ -305,8 +243,7 @@ class AudioManager {
             muted: this.muted,
             masterVolume: this.masterVolume,
             bgmVolume: this.bgmVolume,
-            postVolume: this.postVolume,
-            moveVolume: this.moveVolume,
+            sfxVolume: this.sfxVolume,
         };
     }
 
@@ -315,16 +252,13 @@ class AudioManager {
 
         if (!pool) return 0;
 
-        return pool.filter((audio) => !audio.paused && !audio.ended).length;
+        return pool.filter(audio => !audio.paused && !audio.ended).length;
     }
 
     getTotalActiveSfxCount(): number {
-        return (Object.keys(this.sfxPools) as SfxName[]).reduce(
-            (sum, name) => {
-                return sum + this.getActiveSfxCount(name);
-            },
-            0,
-        );
+        return (Object.keys(this.sfxPools) as SfxName[]).reduce((sum, name) => {
+            return sum + this.getActiveSfxCount(name);
+        }, 0);
     }
 
     canPlaySfx(name: SfxName): boolean {
@@ -355,7 +289,7 @@ class AudioManager {
         }
 
         const pool = this.sfxPools[name];
-        const audio = pool.find((item) => item.paused || item.ended);
+        const audio = pool.find(item => item.paused || item.ended);
 
         if (!audio) {
             return;
@@ -364,7 +298,8 @@ class AudioManager {
         this.lastPlayedAt[name] = Date.now();
         audio.currentTime = 0;
 
-        audio.play()
+        audio
+            .play()
             .then(() => {
                 console.log("sfx played", name);
             })
