@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -48,6 +49,9 @@ func TestFetchViewerSnapshotSummariesCountFullViewers(t *testing.T) {
 	}
 	if len(snapshot.Channels) != 1 {
 		t.Fatalf("len(Channels) = %d, want 1", len(snapshot.Channels))
+	}
+	if snapshot.Total != 25 {
+		t.Fatalf("Total = %d, want 25", snapshot.Total)
 	}
 
 	summary := snapshot.Channels[0]
@@ -106,7 +110,7 @@ func newTestViewers(count int, state string, base time.Time) []traqViewer {
 	viewers := make([]traqViewer, 0, count)
 	for i := range count {
 		viewers = append(viewers, traqViewer{
-			UserID:    state + "-user",
+			UserID:    state + "-user-" + strconv.Itoa(i),
 			State:     state,
 			UpdatedAt: base.Add(time.Duration(i) * time.Minute),
 		})
