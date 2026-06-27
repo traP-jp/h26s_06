@@ -15,6 +15,7 @@ const (
 	authCleanupInterval  = 10 * time.Minute
 	recentMessageIDLimit = 100
 	maxSyncPayloadDeltas = 100
+	userBotCacheLimit    = 1500
 )
 
 type server struct {
@@ -24,6 +25,9 @@ type server struct {
 	authMu   sync.Mutex
 	states   map[string]time.Time
 	sessions map[string]authSession
+
+	userBotMu    sync.Mutex
+	userBotCache map[string]bool
 
 	liveMu    sync.Mutex
 	liveReady bool
@@ -39,6 +43,10 @@ type server struct {
 	liveViewersOnce   sync.Once
 	liveViewersCancel func()
 	authCleanupCancel func()
+	demoSyncOnce      sync.Once
+	demoSyncCancel    func()
+	liveSyncOnce      sync.Once
+	liveSyncCancel    func()
 }
 
 type channel struct {
@@ -94,6 +102,7 @@ type triggerPayload struct {
 	Usr          string `json:"usr,omitempty"`
 	From         string `json:"from,omitempty"`
 	To           string `json:"to,omitempty"`
+	ClearCurrent bool   `json:"-"`
 	MessageID    string `json:"-"`
 	Source       string `json:"-"`
 	SourceDetail string `json:"-"`
@@ -162,9 +171,11 @@ type traqChannel struct {
 
 type traqMessage struct {
 	ChannelID string `json:"channelId"`
-	User      struct {
-		Bot bool `json:"bot"`
-	} `json:"user"`
+	UserID    string `json:"userId"`
+}
+
+type traqUser struct {
+	Bot bool `json:"bot"`
 }
 
 type traqViewer struct {

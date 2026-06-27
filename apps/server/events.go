@@ -49,6 +49,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		initPayload = data.InitJSON
 		liveChannelIDs = data.ChannelIDs
 		liveChannels = data.Channels
+		s.startLiveSyncProducer(streamState)
 	}
 
 	select {
@@ -74,13 +75,12 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	if demo {
 		s.startDemoProducer()
+		s.startDemoSyncProducer()
 	} else {
 		go s.consumeTraqStream(ctx, token.AccessToken, liveChannelIDs, streamState, streamHub)
 	}
 
-	syncTicker := time.NewTicker(s.cfg.syncInterval)
 	heartbeat := time.NewTicker(25 * time.Second)
-	defer syncTicker.Stop()
 	defer heartbeat.Stop()
 
 	for {
@@ -90,18 +90,29 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		case <-heartbeat.C:
 			_, _ = fmt.Fprint(w, ": keep-alive\n\n")
 			flusher.Flush()
-		case <-syncTicker.C:
-			payload := streamState.syncPayload()
-			if len(payload.Deltas) > 0 {
-				writeSSE(w, marshalEvent("sync", payload))
-				flusher.Flush()
-			}
 		case event, ok := <-events:
 			if !ok {
 				return
 			}
 			writeSSE(w, event)
 			flusher.Flush()
+		}
+	}
+}
+
+func (s *server) runSyncProducer(ctx context.Context, state *stateManager, hub *eventHub) {
+	ticker := time.NewTicker(s.cfg.syncInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			payload := state.syncPayload()
+			if len(payload.Deltas) > 0 {
+				hub.publish(marshalEvent("sync", payload))
+			}
 		}
 	}
 }
@@ -113,18 +124,19 @@ func streamStatus(demo bool) string {
 	return "traQ connected"
 }
 
-func (s *server) publishTrigger(trigger triggerPayload, activeChannelIDs map[string]bool, state *stateManager, hub *eventHub) {
+func (s *server) publishTrigger(trigger triggerPayload, activeChannelIDs map[string]bool, state *stateManager, hub *eventHub) (triggerPayload, bool) {
 	if activeChannelIDs != nil && !triggerInActiveChannels(trigger, activeChannelIDs) {
 		if trigger.Type == "mov" {
 			debugMov(trigger, "", "", "skipped", "destination channel is not in active channel set", 0)
 		}
-		return
+		return trigger, false
 	}
 	applied, changed := state.applyTrigger(trigger)
 	if !changed {
-		return
+		return applied, false
 	}
 	hub.publish(marshalEvent("trigger", applied))
+	return applied, true
 }
 
 func triggerInActiveChannels(trigger triggerPayload, active map[string]bool) bool {
@@ -132,6 +144,9 @@ func triggerInActiveChannels(trigger triggerPayload, active map[string]bool) boo
 	case "msg":
 		return active[trigger.Ch]
 	case "mov":
+		if trigger.ClearCurrent {
+			return active[trigger.From]
+		}
 		return active[trigger.To]
 	default:
 		return false

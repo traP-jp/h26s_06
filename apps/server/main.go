@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 )
 
 func main() {
@@ -20,10 +21,14 @@ func main() {
 	if cfg.oauthClientID == "" {
 		traqLogWarn("TRAQ_CLIENT_ID is empty; live mode OAuth is disabled")
 	}
-	if cfg.traqBotAccessToken == "" {
-		traqLogWarn("TRAQ_BOT_ACCESS_TOKEN is empty; viewer polling is disabled")
+	preloadCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.preloadLiveChannelData(preloadCtx); err != nil {
+		log.Fatalf("preload live channel data: %v", err)
 	}
+
 	if err := http.ListenAndServe(cfg.addr, srv.routes()); err != nil {
 		log.Fatal(err)
 	}
+	log.Println("起動しました")
 }
