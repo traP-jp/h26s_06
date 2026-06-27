@@ -44,6 +44,9 @@ func (s *server) close() {
 	if s.authCleanupCancel != nil {
 		s.authCleanupCancel()
 	}
+	if s.liveViewersCancel != nil {
+		s.liveViewersCancel()
+	}
 	s.demoHub.close()
 	s.liveHub.close()
 }
@@ -71,6 +74,19 @@ func (s *server) startDemoProducer() {
 		ctx, cancel := context.WithCancel(context.Background())
 		s.demoCancel = cancel
 		go s.runDemoProducer(ctx, s.demoState, s.demoHub)
+	})
+}
+
+func (s *server) startLiveViewerPolling(channels []traqChannel, state *stateManager) {
+	s.liveViewersOnce.Do(func() {
+		if s.cfg.traqBotAccessToken == "" {
+			traqLogWarn("TRAQ_BOT_ACCESS_TOKEN is empty; viewer polling is disabled")
+			return
+		}
+		traqLogOK("viewer polling started with bot token channels=%d interval=%s", len(channels), s.cfg.viewerPollInterval)
+		ctx, cancel := context.WithCancel(context.Background())
+		s.liveViewersCancel = cancel
+		go s.consumeViewerSnapshots(ctx, s.cfg.traqBotAccessToken, channels, state, s.liveHub)
 	})
 }
 
