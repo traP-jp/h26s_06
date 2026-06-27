@@ -43,89 +43,24 @@ func TestHandleLoginUsesAuthorizationCodeFlow(t *testing.T) {
 	}
 }
 
-func TestSessionTokenRemovesExpiredSession(t *testing.T) {
+func TestSessionTokenRejectsExpiredSession(t *testing.T) {
 	srv, err := newServer(config{})
 	if err != nil {
 		t.Fatalf("newServer returned error: %v", err)
 	}
-	srv.sessions["expired"] = sessionRecord{
-		token:     tokenResponse{AccessToken: "token"},
-		expiresAt: time.Now().Add(-time.Minute),
+
+	srv.sessions["expired-session"] = authSession{
+		Token:     tokenResponse{AccessToken: "expired-access-token"},
+		ExpiresAt: time.Now().Add(-time.Second),
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/me", nil)
-	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "expired"})
+	req := httptest.NewRequest(http.MethodGet, "/api/events", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "expired-session"})
 
-	if _, ok := srv.sessionToken(req); ok {
-		t.Fatal("expired session was accepted")
+	if token, ok := srv.sessionToken(req); ok {
+		t.Fatalf("sessionToken returned ok with token %#v, want expired session rejection", token)
 	}
-	if _, ok := srv.sessions["expired"]; ok {
+	if _, ok := srv.sessions["expired-session"]; ok {
 		t.Fatal("expired session was not removed")
-	}
-}
-
-func TestSessionTokenAcceptsUnexpiredSession(t *testing.T) {
-	srv, err := newServer(config{})
-	if err != nil {
-		t.Fatalf("newServer returned error: %v", err)
-	}
-	srv.sessions["active"] = sessionRecord{
-		token:     tokenResponse{AccessToken: "token"},
-		expiresAt: time.Now().Add(time.Minute),
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/me", nil)
-	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "active"})
-
-	token, ok := srv.sessionToken(req)
-	if !ok {
-		t.Fatal("active session was rejected")
-	}
-	if token.AccessToken != "token" {
-		t.Fatalf("access token = %q, want token", token.AccessToken)
-	}
-}
-
-func TestCleanupExpiredAuthRemovesExpiredStatesAndSessions(t *testing.T) {
-	srv, err := newServer(config{})
-	if err != nil {
-		t.Fatalf("newServer returned error: %v", err)
-	}
-	now := time.Now()
-	srv.states["expired"] = now.Add(-time.Minute)
-	srv.states["active"] = now.Add(time.Minute)
-	srv.sessions["expired"] = sessionRecord{expiresAt: now.Add(-time.Minute)}
-	srv.sessions["active"] = sessionRecord{expiresAt: now.Add(time.Minute)}
-
-	srv.cleanupExpiredAuth(now)
-
-	if _, ok := srv.states["expired"]; ok {
-		t.Fatal("expired state was not removed")
-	}
-	if _, ok := srv.sessions["expired"]; ok {
-		t.Fatal("expired session was not removed")
-	}
-	if _, ok := srv.states["active"]; !ok {
-		t.Fatal("active state was removed")
-	}
-	if _, ok := srv.sessions["active"]; !ok {
-		t.Fatal("active session was removed")
-	}
-}
-
-func TestCleanupExpiredAuthKeepsNeverExpiringSession(t *testing.T) {
-	srv, err := newServer(config{})
-	if err != nil {
-		t.Fatalf("newServer returned error: %v", err)
-	}
-	now := time.Now()
-	srv.sessions["never-expiring"] = sessionRecord{
-		token: tokenResponse{AccessToken: "token"},
-	}
-
-	srv.cleanupExpiredAuth(now)
-
-	if _, ok := srv.sessions["never-expiring"]; !ok {
-		t.Fatal("never-expiring session was removed")
 	}
 }

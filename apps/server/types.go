@@ -23,7 +23,7 @@ type server struct {
 
 	authMu   sync.Mutex
 	states   map[string]time.Time
-	sessions map[string]sessionRecord
+	sessions map[string]authSession
 
 	liveMu    sync.Mutex
 	liveReady bool
@@ -128,6 +128,11 @@ type viewerRow struct {
 	ChannelName string    `json:"channelName"`
 	State       string    `json:"state"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type authSession struct {
+	Token     tokenResponse
+	ExpiresAt time.Time
 }
 
 type tokenResponse struct {

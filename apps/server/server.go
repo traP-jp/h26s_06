@@ -16,7 +16,7 @@ func newServer(cfg config) (*server, error) {
 		cfg:        cfg,
 		client:     &http.Client{Timeout: 15 * time.Second},
 		states:     map[string]time.Time{},
-		sessions:   map[string]sessionRecord{},
+		sessions:   map[string]authSession{},
 		demoState:  demoState,
 		demoHub:    newEventHub(),
 		liveHub:    newEventHub(),
