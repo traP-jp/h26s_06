@@ -698,36 +698,28 @@ onBeforeUnmount(() => {
                 title="親チャンネルへ移動"
                 aria-label="親チャンネルへ移動"
                 @click="selectedId = selected.navigation.parentId"
-            >
-                ↑
-            </button>
+            />
             <button
                 class="channel-nav-key channel-nav-key--left"
                 :disabled="!selected.navigation.previousSiblingId"
                 title="前の兄弟チャンネルへ移動"
                 aria-label="前の兄弟チャンネルへ移動"
                 @click="selectedId = selected.navigation.previousSiblingId"
-            >
-                ←
-            </button>
+            />
             <button
                 class="channel-nav-key channel-nav-key--down"
                 :disabled="!selected.navigation.childId"
                 title="子チャンネルへ移動"
                 aria-label="子チャンネルへ移動"
                 @click="selectedId = selected.navigation.childId"
-            >
-                ↓
-            </button>
+            />
             <button
                 class="channel-nav-key channel-nav-key--right"
                 :disabled="!selected.navigation.nextSiblingId"
                 title="次の兄弟チャンネルへ移動"
                 aria-label="次の兄弟チャンネルへ移動"
                 @click="selectedId = selected.navigation.nextSiblingId"
-            >
-                →
-            </button>
+            />
         </div>
 
         <footer
