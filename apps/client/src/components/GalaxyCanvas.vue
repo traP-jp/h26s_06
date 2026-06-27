@@ -171,13 +171,13 @@ function createEdges() {
     const colors: number[] = [];
     const color = new Color();
     for (const node of props.graph.nodes) {
-        if (!node.parentId) continue;
+        if (!hasHierarchyEdge(node)) continue;
         const parent = props.graph.get(node.parentId);
         if (!parent) continue;
         positions.push(parent.x, parent.y, parent.z, node.x, node.y, node.z);
-        color.set(parent.color);
+        color.set(isGrandRootEdge(node) ? "#7b8798" : parent.color);
         colors.push(color.r, color.g, color.b);
-        color.set(node.color);
+        color.set(isGrandRootEdge(node) ? "#7b8798" : node.color);
         colors.push(color.r, color.g, color.b);
     }
     const geometry = new BufferGeometry();
@@ -212,13 +212,15 @@ function updateEdges(now: number) {
     let colOffset = 0;
 
     for (const node of props.graph.nodes) {
-        if (!node.parentId) continue;
+        if (!hasHierarchyEdge(node)) continue;
         const parent = props.graph.get(node.parentId);
         if (!parent) continue;
 
+        const alphaScale = isGrandRootEdge(node) ? 0.26 : 1;
         const alpha =
             Math.min(parent.visibilityAlpha, node.visibilityAlpha) *
-            Math.min(parent.emphasis, node.emphasis);
+            Math.min(parent.emphasis, node.emphasis) *
+            alphaScale;
 
         const wxParent = Math.sin(now * 0.0008 + parent.index * 1.2) * 1.5;
         const wyParent = Math.cos(now * 0.0009 + parent.index * 0.8) * 1.5;
@@ -251,6 +253,16 @@ function updateEdges(now: number) {
     }
     positionAttribute.needsUpdate = true;
     colorAttribute.needsUpdate = true;
+}
+
+type HierarchyEdgeNode = ChannelGraph["nodes"][number] & { parentId: string };
+
+function hasHierarchyEdge(node: ChannelGraph["nodes"][number]): node is HierarchyEdgeNode {
+    return node.parentId !== null;
+}
+
+function isGrandRootEdge(node: HierarchyEdgeNode) {
+    return node.parentId === "grand_root";
 }
 
 function createSelectionPath() {
