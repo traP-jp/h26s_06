@@ -335,11 +335,15 @@ func (sm *stateManager) randomLeafID() string {
 func (sm *stateManager) rebuildInitJSONLocked() error {
 	payload := initPayload{Channels: make(map[string]initChannel, len(sm.channels))}
 	for id, ch := range sm.channels {
+		children := ch.Children
+		if children == nil {
+			children = []string{}
+		}
 		payload.Channels[id] = initChannel{
 			ID:       ch.ID,
 			Name:     ch.Name,
 			ParentID: ch.ParentID,
-			Children: append([]string(nil), ch.Children...),
+			Children: children,
 			IslandID: ch.IslandID,
 			Depth:    ch.Depth,
 		}
