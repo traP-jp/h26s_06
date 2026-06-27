@@ -688,40 +688,6 @@ onBeforeUnmount(() => {
             </dl>
         </aside>
 
-        <div
-            v-if="selected"
-            class="channel-nav-keys"
-        >
-            <button
-                class="channel-nav-key channel-nav-key--up"
-                :disabled="!selected.navigation.parentId"
-                title="親チャンネルへ移動"
-                aria-label="親チャンネルへ移動"
-                @click="selectedId = selected.navigation.parentId"
-            />
-            <button
-                class="channel-nav-key channel-nav-key--left"
-                :disabled="!selected.navigation.previousSiblingId"
-                title="前の兄弟チャンネルへ移動"
-                aria-label="前の兄弟チャンネルへ移動"
-                @click="selectedId = selected.navigation.previousSiblingId"
-            />
-            <button
-                class="channel-nav-key channel-nav-key--down"
-                :disabled="!selected.navigation.childId"
-                title="子チャンネルへ移動"
-                aria-label="子チャンネルへ移動"
-                @click="selectedId = selected.navigation.childId"
-            />
-            <button
-                class="channel-nav-key channel-nav-key--right"
-                :disabled="!selected.navigation.nextSiblingId"
-                title="次の兄弟チャンネルへ移動"
-                aria-label="次の兄弟チャンネルへ移動"
-                @click="selectedId = selected.navigation.nextSiblingId"
-            />
-        </div>
-
         <footer
             v-if="authState === 'authenticated'"
             class="hint"
