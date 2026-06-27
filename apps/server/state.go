@@ -190,8 +190,7 @@ func (sm *stateManager) clearUserStatus(userID string) bool {
 	}
 	user := sm.users[userID]
 	if user == nil {
-		user = &userState{UserID: userID}
-		sm.users[userID] = user
+		return false
 	}
 	user.CurrentChannel = ""
 	user.LastUpdated = time.Now()
