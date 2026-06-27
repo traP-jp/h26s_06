@@ -151,14 +151,7 @@ func TestStreamCurrentViewerEventsEmitsAfterViewerSignal(t *testing.T) {
 	defer cancel()
 	events := srv.streamCurrentViewerEvents(ctx, "token", "current-user", state, map[string]bool{"general": true})
 
-	initial := readViewerEvent(t, events)
-	var initialPayload viewersPayload
-	if err := json.Unmarshal(initial.Data, &initialPayload); err != nil {
-		t.Fatalf("json.Unmarshal initial returned error: %v", err)
-	}
-	if len(initialPayload.Viewers) != 0 {
-		t.Fatalf("initial viewers = %#v, want empty", initialPayload.Viewers)
-	}
+	assertNoViewerEvent(t, events)
 
 	if !state.setUserStatus("current-user", "general") {
 		t.Fatal("setUserStatus returned false")
@@ -173,6 +166,33 @@ func TestStreamCurrentViewerEventsEmitsAfterViewerSignal(t *testing.T) {
 	if !reflect.DeepEqual(payload.Viewers, []string{"user-00"}) {
 		t.Fatalf("payload.Viewers = %#v, want [user-00]", payload.Viewers)
 	}
+}
+
+func TestStreamCurrentViewerEventsDoesNotEmitAfterStatusClear(t *testing.T) {
+	base := time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC)
+	srv := newViewerSnapshotTestServer(t, map[string][]traqViewer{
+		"general": {{UserID: "user-00", State: "monitoring", UpdatedAt: base}},
+	})
+	state, err := newStateManagerFromTraq([]traqChannel{{ID: "general", Name: "general"}})
+	if err != nil {
+		t.Fatalf("newStateManagerFromTraq returned error: %v", err)
+	}
+	if !state.setUserStatus("current-user", "general") {
+		t.Fatal("setUserStatus returned false")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	events := srv.streamCurrentViewerEvents(ctx, "token", "current-user", state, map[string]bool{"general": true})
+
+	_ = readViewerEvent(t, events)
+	if !state.clearUserStatus("current-user") {
+		t.Fatal("clearUserStatus returned false")
+	}
+	srv.viewerHub.publish(viewerSignal{})
+	srv.viewerHub.publish(viewerSignal{ChannelID: "general"})
+
+	assertNoViewerEvent(t, events)
 }
 
 func newViewerSnapshotTestServer(t *testing.T, viewersByChannel map[string][]traqViewer) *server {
@@ -231,6 +251,18 @@ func readViewerEvent(t *testing.T, events <-chan sseEvent) sseEvent {
 		t.Fatal("timed out waiting for viewer event")
 	}
 	return sseEvent{}
+}
+
+func assertNoViewerEvent(t *testing.T, events <-chan sseEvent) {
+	t.Helper()
+	select {
+	case event, ok := <-events:
+		if !ok {
+			t.Fatal("viewer event channel was closed")
+		}
+		t.Fatalf("unexpected viewer event: %#v", event)
+	case <-time.After(20 * time.Millisecond):
+	}
 }
 
 func newTestViewers(count int, state string, base time.Time) []traqViewer {

@@ -204,7 +204,7 @@ func (s *server) runCurrentViewerEvents(ctx context.Context, out chan<- sseEvent
 func (s *server) currentViewersEvent(ctx context.Context, accessToken string, userID string, state *stateManager, activeChannelIDs map[string]bool) (sseEvent, bool) {
 	channelID := state.currentChannel(userID)
 	if channelID == "" || (activeChannelIDs != nil && !activeChannelIDs[channelID]) {
-		return marshalEvent("viewers", viewersPayload{Viewers: []string{}}), true
+		return sseEvent{}, false
 	}
 
 	viewers, err := s.fetchChannelViewers(ctx, accessToken, channelID)
