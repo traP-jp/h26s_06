@@ -50,6 +50,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		initPayload = data.InitJSON
 		liveChannelIDs = data.ChannelIDs
 		liveChannels = data.Channels
+		s.startLiveViewerPolling(liveChannels)
 	}
 
 	select {
@@ -73,7 +74,6 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		s.startDemoProducer()
 	} else {
 		go s.consumeTraqStream(ctx, token.AccessToken, liveChannelIDs, streamState, streamHub)
-		go s.consumeViewerSnapshots(ctx, token.AccessToken, liveChannels, streamHub)
 	}
 
 	syncTicker := time.NewTicker(s.cfg.syncInterval)

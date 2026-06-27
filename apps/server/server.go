@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 )
@@ -41,6 +42,9 @@ func (s *server) close() {
 	if s.demoCancel != nil {
 		s.demoCancel()
 	}
+	if s.liveViewersCancel != nil {
+		s.liveViewersCancel()
+	}
 	s.demoHub.close()
 	s.liveHub.close()
 }
@@ -50,6 +54,18 @@ func (s *server) startDemoProducer() {
 		ctx, cancel := context.WithCancel(context.Background())
 		s.demoCancel = cancel
 		go s.runDemoProducer(ctx, s.demoState, s.demoHub)
+	})
+}
+
+func (s *server) startLiveViewerPolling(channels []traqChannel) {
+	s.liveViewersOnce.Do(func() {
+		if s.cfg.traqBotAccessToken == "" {
+			log.Printf("TRAQ_BOT_ACCESS_TOKEN is empty; viewer polling is disabled")
+			return
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		s.liveViewersCancel = cancel
+		go s.consumeViewerSnapshots(ctx, s.cfg.traqBotAccessToken, channels, s.liveHub)
 	})
 }
 

@@ -19,6 +19,9 @@ func main() {
 	if cfg.oauthClientID == "" {
 		log.Printf("TRAQ_CLIENT_ID is empty; live mode OAuth is disabled")
 	}
+	if cfg.traqBotAccessToken == "" {
+		log.Printf("TRAQ_BOT_ACCESS_TOKEN is empty; viewer polling is disabled")
+	}
 	if err := http.ListenAndServe(cfg.addr, logRequests(srv.routes())); err != nil {
 		log.Fatal(err)
 	}

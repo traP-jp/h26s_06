@@ -59,7 +59,7 @@ func newDemoStateManager() (*stateManager, error) {
 		}
 	}
 
-	sm := &stateManager{channels: channels, users: map[string]*userState{}}
+	sm := &stateManager{channels: channels, users: map[string]*userState{}, seenMessageIDs: map[string]struct{}{}}
 	if err := sm.rebuildInitJSONLocked(); err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func newStateManagerFromTraq(channels []traqChannel) (*stateManager, error) {
 		assignLayout(nodes, rootID, islandID, 1)
 	}
 
-	sm := &stateManager{channels: nodes, users: map[string]*userState{}}
+	sm := &stateManager{channels: nodes, users: map[string]*userState{}, seenMessageIDs: map[string]struct{}{}}
 	if err := sm.rebuildInitJSONLocked(); err != nil {
 		return nil, err
 	}
@@ -150,6 +150,12 @@ func (sm *stateManager) applyTrigger(trigger triggerPayload) (triggerPayload, bo
 	case "msg":
 		if trigger.Ch == "" || sm.channels[trigger.Ch] == nil {
 			return trigger, false
+		}
+		if trigger.MessageID != "" {
+			if _, ok := sm.seenMessageIDs[trigger.MessageID]; ok {
+				return trigger, false
+			}
+			sm.rememberMessageIDLocked(trigger.MessageID)
 		}
 		sm.addScoreLocked(trigger.Ch, 46)
 		return trigger, true
@@ -186,6 +192,18 @@ func (sm *stateManager) applyTrigger(trigger triggerPayload) (triggerPayload, bo
 	default:
 		return trigger, false
 	}
+}
+
+func (sm *stateManager) rememberMessageIDLocked(messageID string) {
+	sm.seenMessageIDs[messageID] = struct{}{}
+	sm.recentMessageIDs = append(sm.recentMessageIDs, messageID)
+	if len(sm.recentMessageIDs) <= recentMessageIDLimit {
+		return
+	}
+	evicted := sm.recentMessageIDs[0]
+	copy(sm.recentMessageIDs, sm.recentMessageIDs[1:])
+	sm.recentMessageIDs = sm.recentMessageIDs[:len(sm.recentMessageIDs)-1]
+	delete(sm.seenMessageIDs, evicted)
 }
 
 func (sm *stateManager) addScoreLocked(channelID string, amount float64) {

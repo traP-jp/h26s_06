@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -43,6 +44,60 @@ func TestStateManagerApplyTriggerSkipsDuplicateMovement(t *testing.T) {
 	}
 	if _, ok := state.applyTrigger(triggerPayload{Type: "mov", Usr: "u1", To: channelID}); ok {
 		t.Fatal("duplicate movement was applied")
+	}
+}
+
+func TestStateManagerApplyTriggerSkipsDuplicateMessage(t *testing.T) {
+	state, err := newStateManagerFromTraq([]traqChannel{{ID: "root", Name: "root"}})
+	if err != nil {
+		t.Fatalf("newStateManagerFromTraq returned error: %v", err)
+	}
+
+	trigger := triggerPayload{Type: "msg", Ch: "root", MessageID: "message-1"}
+	if _, ok := state.applyTrigger(trigger); !ok {
+		t.Fatal("first message was not applied")
+	}
+	if _, ok := state.applyTrigger(trigger); ok {
+		t.Fatal("duplicate message was applied")
+	}
+
+	state.mu.RLock()
+	score := state.channels["root"].Score
+	state.mu.RUnlock()
+	if score != 46 {
+		t.Fatalf("root score = %v, want 46", score)
+	}
+}
+
+func TestStateManagerKeepsOnlyRecentMessageIDs(t *testing.T) {
+	state, err := newStateManagerFromTraq([]traqChannel{{ID: "root", Name: "root"}})
+	if err != nil {
+		t.Fatalf("newStateManagerFromTraq returned error: %v", err)
+	}
+
+	for i := 0; i < recentMessageIDLimit+1; i++ {
+		trigger := triggerPayload{Type: "msg", Ch: "root", MessageID: fmt.Sprintf("message-%d", i)}
+		if _, ok := state.applyTrigger(trigger); !ok {
+			t.Fatalf("message %d was not applied", i)
+		}
+	}
+
+	state.mu.RLock()
+	seenCount := len(state.seenMessageIDs)
+	recentCount := len(state.recentMessageIDs)
+	_, firstStillSeen := state.seenMessageIDs["message-0"]
+	state.mu.RUnlock()
+	if seenCount != recentMessageIDLimit {
+		t.Fatalf("seen message IDs = %d, want %d", seenCount, recentMessageIDLimit)
+	}
+	if recentCount != recentMessageIDLimit {
+		t.Fatalf("recent message IDs = %d, want %d", recentCount, recentMessageIDLimit)
+	}
+	if firstStillSeen {
+		t.Fatal("oldest message ID was not evicted")
+	}
+	if _, ok := state.applyTrigger(triggerPayload{Type: "msg", Ch: "root", MessageID: "message-0"}); !ok {
+		t.Fatal("evicted message ID was still treated as duplicate")
 	}
 }
 

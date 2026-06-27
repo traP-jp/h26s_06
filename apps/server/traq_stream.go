@@ -91,7 +91,13 @@ func (s *server) parseTraqEvent(ctx context.Context, accessToken string, payload
 		if err != nil || isBot || channelID == "" {
 			return nil, err
 		}
-		return []triggerPayload{{Type: "msg", Ch: channelID}}, nil
+		return []triggerPayload{{
+			Type:         "msg",
+			Ch:           channelID,
+			MessageID:    body.ID,
+			Source:       "ws",
+			SourceDetail: "traQ /api/v3/ws timeline_streaming:on MESSAGE_CREATED",
+		}}, nil
 	case "USER_VIEWSTATE_CHANGED":
 		var body wsViewStateChangedBody
 		if err := json.Unmarshal(event.Body, &body); err != nil {
