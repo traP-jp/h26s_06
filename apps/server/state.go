@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+const (
+	messageScoreAmount   = 1.0
+	movementScoreAmount  = 0.25
+	ancestorScoreFactor  = 0.45
+	scoreDecayTimeScale  = 300.0
+	syncDeltaWeightScale = 10.0
+	viewerScoreWeight    = 0.46
+)
+
 func newDemoStateManager() (*stateManager, error) {
 	now := time.Now()
 	channels := map[string]*channel{
@@ -170,9 +179,21 @@ func (sm *stateManager) applyTrigger(trigger triggerPayload) (triggerPayload, bo
 			}
 			sm.rememberMessageIDLocked(trigger.MessageID)
 		}
-		sm.addScoreLocked(trigger.Ch, 46)
+		sm.addScoreLocked(trigger.Ch, messageScoreAmount)
 		return trigger, true
 	case "mov":
+		if trigger.ClearCurrent {
+			if trigger.Usr == "" || trigger.From == "" {
+				return trigger, false
+			}
+			user := sm.users[trigger.Usr]
+			if user == nil || user.CurrentChannel != trigger.From {
+				return trigger, false
+			}
+			user.CurrentChannel = ""
+			user.LastUpdated = time.Now()
+			return trigger, false
+		}
 		if trigger.To == "" || sm.channels[trigger.To] == nil {
 			debugMov(trigger, "", "", "skipped", "destination channel is empty or unknown", 0)
 			return trigger, false
@@ -198,7 +219,7 @@ func (sm *stateManager) applyTrigger(trigger triggerPayload) (triggerPayload, bo
 		if from := sm.channels[trigger.From]; from != nil {
 			fromName = from.Name
 		}
-		score := 11.0
+		score := movementScoreAmount
 		sm.addScoreLocked(trigger.To, score)
 		debugMov(trigger, fromName, toName, "applied", "user moved to a different channel; destination channel and ancestors receive movement score", score)
 		return trigger, true
@@ -225,7 +246,7 @@ func (sm *stateManager) addScoreLocked(channelID string, amount float64) {
 		if ch == nil {
 			return
 		}
-		ch.Score = math.Min(100, ch.Score+amount*math.Pow(0.45, float64(depth)))
+		ch.Score += amount * math.Pow(ancestorScoreFactor, float64(depth))
 		channelID = ch.ParentID
 	}
 }
@@ -239,7 +260,7 @@ func (sm *stateManager) syncPayload() syncPayload {
 	for _, ch := range sm.channels {
 		decayElapsed := now.Sub(ch.LastDecayTime).Seconds()
 		if decayElapsed > 0 {
-			ch.Score *= math.Exp(-decayElapsed / 24)
+			ch.Score *= math.Exp(-decayElapsed / scoreDecayTimeScale)
 		}
 		ch.LastDecayTime = now
 
@@ -263,7 +284,7 @@ func (sm *stateManager) syncPayload() syncPayload {
 }
 
 func syncPayloadWeight(deltaScore float64, elapsedSeconds float64) float64 {
-	return 0.22*deltaScore + 0.002*elapsedSeconds
+	return syncDeltaWeightScale*deltaScore + 0.002*elapsedSeconds
 }
 
 func (sm *stateManager) sampleViewerChannels(candidates []traqChannel, maxChannels int) []traqChannel {
@@ -301,7 +322,7 @@ func (sm *stateManager) sampleViewerChannels(candidates []traqChannel, maxChanne
 }
 
 func viewerPollWeight(score float64, elapsedSeconds float64) float64 {
-	return 0.01*score + 0.001*elapsedSeconds
+	return viewerScoreWeight*score + 0.001*elapsedSeconds
 }
 
 func (sm *stateManager) randomLeafID() string {
@@ -323,11 +344,15 @@ func (sm *stateManager) randomLeafID() string {
 func (sm *stateManager) rebuildInitJSONLocked() error {
 	payload := initPayload{Channels: make(map[string]initChannel, len(sm.channels))}
 	for id, ch := range sm.channels {
+		children := ch.Children
+		if children == nil {
+			children = []string{}
+		}
 		payload.Channels[id] = initChannel{
 			ID:       ch.ID,
 			Name:     ch.Name,
 			ParentID: ch.ParentID,
-			Children: append([]string(nil), ch.Children...),
+			Children: children,
 			IslandID: ch.IslandID,
 			Depth:    ch.Depth,
 		}
