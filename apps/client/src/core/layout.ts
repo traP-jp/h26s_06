@@ -7,12 +7,13 @@ import {
     forceY,
     forceZ,
 } from "d3-force-3d";
-import type { SimulationLinkDatum, SimulationNodeDatum } from "d3-force-3d";
+import type { Force, SimulationLinkDatum, SimulationNodeDatum } from "d3-force-3d";
 
 const POSITION_COMPONENTS = 3;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const ROOT_SEPARATION = 55;
 const MIN_OUTWARD_DOT = 0.001;
+const HEAT_REPULSION_STRENGTH = 34;
 
 export interface LayoutNode {
     index: number;
@@ -23,6 +24,7 @@ export interface LayoutNode {
     isLayoutActive: boolean;
     isExpansionOrigin: boolean;
     emphasis: number;
+    relativeScore: number;
     x: number;
     y: number;
     z: number;
@@ -34,6 +36,7 @@ interface ForceNode extends SimulationNodeDatum {
     islandId: number;
     radius: number;
     emphasis: number;
+    relativeScore: number;
 }
 
 interface ForceLinkDatum extends SimulationLinkDatum<ForceNode> {
@@ -90,6 +93,7 @@ export function calculateLayout(nodes: LayoutNode[]) {
             islandId: node.islandId,
             radius,
             emphasis: node.emphasis,
+            relativeScore: node.relativeScore,
             x: position.x,
             y: position.y,
             z: position.z,
@@ -131,6 +135,7 @@ export function calculateLayout(nodes: LayoutNode[]) {
                 .distanceMax(240)
                 .theta(1)
         )
+        .force("heat-repulsion", forceHeatRepulsion())
         .force(
             "collide",
             forceCollide<ForceNode>()
@@ -344,6 +349,28 @@ function branchAxis(
     return { x: 1, y: 0, z: 0 };
 }
 
+function forceHeatRepulsion(): Force<ForceNode> {
+    let nodes: ForceNode[] = [];
+
+    const force = (alpha: number) => {
+        for (const node of nodes) {
+            if (node.depth <= 0 || node.relativeScore <= 0) continue;
+
+            const position = pointFromForce(node);
+            const axis =
+                lengthSquared(position) > 0.01 ? normalize(position) : fallbackAxis(node.id);
+            const strength = alpha * HEAT_REPULSION_STRENGTH * node.relativeScore;
+            node.vx = (node.vx ?? 0) + axis.x * strength;
+            node.vy = (node.vy ?? 0) + axis.y * strength;
+            node.vz = (node.vz ?? 0) + axis.z * strength;
+        }
+    };
+    force.initialize = (initializedNodes: ForceNode[]) => {
+        nodes = initializedNodes;
+    };
+    return force;
+}
+
 function constrainDeepNodesOutward(
     forceNodes: ForceNode[],
     activeNodes: LayoutNode[],
@@ -434,6 +461,17 @@ function branchDistance(siblingCount: number, childCount: number) {
 function pseudoRandom(seed: number) {
     const x = Math.sin((seed + 1) * 9999.99) * 10000;
     return x - Math.floor(x);
+}
+
+function fallbackAxis(seed: number): Point {
+    const angle = pseudoRandom(seed) * Math.PI * 2;
+    const z = pseudoRandom(seed + 97) * 2 - 1;
+    const horizontalRadius = Math.sqrt(Math.max(0, 1 - z * z));
+    return {
+        x: Math.cos(angle) * horizontalRadius,
+        y: Math.sin(angle) * horizontalRadius,
+        z,
+    };
 }
 
 function subtract(left: Point, right: Point): Point {

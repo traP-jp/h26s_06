@@ -37,6 +37,7 @@ function createLayoutInput(nodes: readonly ChannelNode[]): LayoutNode[] {
         isLayoutActive: node.isLayoutActive,
         isExpansionOrigin: node.isExpansionOrigin,
         emphasis: node.emphasis,
+        relativeScore: node.relativeScore,
         x: node.targetX,
         y: node.targetY,
         z: node.targetZ,

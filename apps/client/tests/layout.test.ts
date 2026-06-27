@@ -15,6 +15,7 @@ function createIrregularTree(): LayoutNode[] {
             isLayoutActive: true,
             isExpansionOrigin: false,
             emphasis: 1,
+            relativeScore: 0,
             x: 0,
             y: 0,
             z: 0,
@@ -42,6 +43,27 @@ function createIrregularTree(): LayoutNode[] {
     for (let index = 0; index < 160; index += 1) {
         add(crowdedBranch, 3, 42);
     }
+    return nodes;
+}
+
+function createHeatRepulsionTree(relativeScore: number): LayoutNode[] {
+    const nodes = createIrregularTree().slice(0, 2);
+    nodes[0]!.children = [1];
+    nodes[1]!.children = [2];
+    nodes.push({
+        index: 2,
+        parentIndex: 1,
+        children: [],
+        depth: 2,
+        islandId: 0,
+        isLayoutActive: true,
+        isExpansionOrigin: false,
+        emphasis: 1,
+        relativeScore,
+        x: 0,
+        y: 0,
+        z: 0,
+    });
     return nodes;
 }
 
@@ -118,5 +140,14 @@ describe("calculateLayout", () => {
 
             expect(dot(parentToNode, outwardAxis)).toBeGreaterThan(0);
         }
+    });
+
+    test("pushes hotter channels farther from grand root", () => {
+        const coolPositions = calculateLayout(createHeatRepulsionTree(0));
+        const hotPositions = calculateLayout(createHeatRepulsionTree(1));
+
+        expect(distance(position(hotPositions, 2), position(hotPositions, 0))).toBeGreaterThan(
+            distance(position(coolPositions, 2), position(coolPositions, 0))
+        );
     });
 });
