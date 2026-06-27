@@ -24,6 +24,7 @@ type server struct {
 	demoState  *stateManager
 	demoHub    *eventHub
 	liveHub    *eventHub
+	viewerHub  *viewerSignalHub
 	initTokens chan struct{}
 
 	demoOnce          sync.Once

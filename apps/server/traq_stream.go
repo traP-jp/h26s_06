@@ -53,6 +53,31 @@ func (s wsViewState) channelID() string {
 	return s.ChannelIDSnake
 }
 
+type wsChannelViewersChangedBody struct {
+	ID             string `json:"id"`
+	ChannelID      string `json:"channelId"`
+	ChannelIDUpper string `json:"channelID"`
+	ChannelIDSnake string `json:"channel_id"`
+	Channel        struct {
+		ID string `json:"id"`
+	} `json:"channel"`
+}
+
+func (b wsChannelViewersChangedBody) channelID() string {
+	switch {
+	case b.ChannelID != "":
+		return b.ChannelID
+	case b.ChannelIDUpper != "":
+		return b.ChannelIDUpper
+	case b.ChannelIDSnake != "":
+		return b.ChannelIDSnake
+	case b.Channel.ID != "":
+		return b.Channel.ID
+	default:
+		return b.ID
+	}
+}
+
 func (s *server) streamTraqTriggers(ctx context.Context, accessToken string) (<-chan triggerPayload, <-chan error) {
 	out := make(chan triggerPayload)
 	errs := make(chan error, 1)
@@ -177,6 +202,21 @@ func (s *server) parseTraqEvent(ctx context.Context, accessToken string, payload
 		}
 		traqLogWS("USER_VIEWSTATE_CHANGED viewStates=%d triggers=%d", len(body.ViewStates), len(triggers))
 		return triggers, nil
+	case "CHANNEL_VIEWERS_CHANGED":
+		var body wsChannelViewersChangedBody
+		if err := json.Unmarshal(event.Body, &body); err != nil {
+			return nil, err
+		}
+		channelID := body.channelID()
+		if channelID == "" {
+			traqLogWarn("CHANNEL_VIEWERS_CHANGED skipped: empty channel id")
+			return nil, nil
+		}
+		traqLogWS("CHANNEL_VIEWERS_CHANGED channelID=%s", channelID)
+		if s.viewerHub != nil {
+			s.viewerHub.publish(viewerSignal{ChannelID: channelID})
+		}
+		return nil, nil
 	default:
 		return nil, nil
 	}

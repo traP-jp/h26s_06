@@ -8,6 +8,7 @@ import { ChannelGraph } from "./core/channelGraph";
 import { beginLogin, fetchCurrentUser } from "./services/auth";
 import { calculateChannelLayout } from "./services/channelLayout";
 import { EventStream } from "./services/eventStream";
+import { useKeyboardManager } from "./services/keyboardManager";
 import type { AuthUser } from "./types/api";
 
 type AuthState = "checking" | "authenticated" | "error" | "forbidden";
@@ -87,6 +88,16 @@ function unlockAudio(): void {
     audioManager.unlock();
 }
 
+function toggleSettings(): void {
+    if (authState.value !== "authenticated") return;
+
+    if (settingsOpen.value) {
+        closeSettings();
+    } else {
+        openSettings();
+    }
+}
+
 function openSettings(): void {
     audioManager.unlock({ startBgm: false });
     settingsOpen.value = true;
@@ -94,6 +105,11 @@ function openSettings(): void {
 
 function closeSettings(): void {
     settingsOpen.value = false;
+}
+
+function toggleMuted(): void {
+    muted.value = !muted.value;
+    audioManager.setMuted(muted.value);
 }
 
 function changeMuted(event: Event): void {
@@ -134,6 +150,16 @@ function resetAudioSettings(): void {
     bgmVolume.value = audioManager.bgmVolume;
     sfxVolume.value = audioManager.sfxVolume;
 }
+
+useKeyboardManager({
+    selected,
+    selectedId,
+    muted,
+    settingsOpen,
+    onMuteToggle: toggleMuted,
+    onSettingsClose: closeSettings,
+    onSettingsToggle: toggleSettings,
+});
 
 function scheduleLayout(targetGraph: ChannelGraph): void {
     const generation = ++layoutGeneration;
