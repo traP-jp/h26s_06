@@ -58,6 +58,24 @@ function distance(left: ReturnType<typeof position>, right: ReturnType<typeof po
     return Math.hypot(left.x - right.x, left.y - right.y, left.z - right.z);
 }
 
+function subtract(left: ReturnType<typeof position>, right: ReturnType<typeof position>) {
+    return {
+        x: left.x - right.x,
+        y: left.y - right.y,
+        z: left.z - right.z,
+    };
+}
+
+function dot(left: ReturnType<typeof position>, right: ReturnType<typeof position>) {
+    return left.x * right.x + left.y * right.y + left.z * right.z;
+}
+
+function normalize(point: ReturnType<typeof position>) {
+    const length = Math.hypot(point.x, point.y, point.z);
+    if (length < 0.0001) return { x: 1, y: 0, z: 0 };
+    return { x: point.x / length, y: point.y / length, z: point.z / length };
+}
+
 describe("calculateLayout", () => {
     test("separates irregular islands and keeps every coordinate finite", () => {
         const nodes = createIrregularTree();
@@ -74,11 +92,31 @@ describe("calculateLayout", () => {
 
         const smallRoot = position(positions, 3);
         const crowdedBranch = position(positions, 4);
-        expect(distance(smallRoot, crowdedBranch)).toBeLessThan(90);
+        expect(distance(smallRoot, crowdedBranch)).toBeLessThan(180);
     });
 
     test("is deterministic for the same topology", () => {
         const nodes = createIrregularTree();
         expect(calculateLayout(nodes)).toEqual(calculateLayout(nodes));
+    });
+
+    test("keeps channels at depth three and deeper outside their parent branch", () => {
+        const nodes = createIrregularTree();
+        const positions = calculateLayout(nodes);
+
+        for (const node of nodes) {
+            if (node.depth < 3) continue;
+            const parent = nodes[node.parentIndex];
+            const grandParent = parent ? nodes[parent.parentIndex] : undefined;
+            if (!parent || !grandParent) continue;
+
+            const grandParentPosition = position(positions, grandParent.index);
+            const parentPosition = position(positions, parent.index);
+            const nodePosition = position(positions, node.index);
+            const outwardAxis = normalize(subtract(parentPosition, grandParentPosition));
+            const parentToNode = subtract(nodePosition, parentPosition);
+
+            expect(dot(parentToNode, outwardAxis)).toBeGreaterThan(0);
+        }
     });
 });

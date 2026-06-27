@@ -12,6 +12,7 @@ import type { SimulationLinkDatum, SimulationNodeDatum } from "d3-force-3d";
 const POSITION_COMPONENTS = 3;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const ROOT_SEPARATION = 55;
+const MIN_OUTWARD_DOT = 0.001;
 
 export interface LayoutNode {
     index: number;
@@ -158,6 +159,7 @@ export function calculateLayout(nodes: LayoutNode[]) {
         .stop();
 
     simulation.tick(simulationTicks);
+    constrainDeepNodesOutward(forceNodes, activeNodes, activeByIndex);
 
     for (const node of forceNodes) {
         setPosition(positions, node.id, node.x ?? 0, node.y ?? 0, node.z ?? 0);
@@ -342,6 +344,53 @@ function branchAxis(
     return { x: 1, y: 0, z: 0 };
 }
 
+function constrainDeepNodesOutward(
+    forceNodes: ForceNode[],
+    activeNodes: LayoutNode[],
+    activeByIndex: ReadonlyMap<number, LayoutNode>
+) {
+    const forceByID = new Map(forceNodes.map(node => [node.id, node]));
+    const deepNodes = [...activeNodes]
+        .filter(node => node.depth >= 3)
+        .sort((left, right) => left.depth - right.depth);
+    for (const node of deepNodes) {
+        const parent = activeByIndex.get(node.parentIndex);
+        const grandParent = parent ? activeByIndex.get(parent.parentIndex) : undefined;
+        const forceNode = forceByID.get(node.index);
+        const forceParent = parent ? forceByID.get(parent.index) : undefined;
+        const forceGrandParent = grandParent ? forceByID.get(grandParent.index) : undefined;
+        if (!parent || !grandParent || !forceNode || !forceParent || !forceGrandParent) continue;
+
+        const grandParentPosition = pointFromForce(forceGrandParent);
+        const parentPosition = pointFromForce(forceParent);
+        const nodePosition = pointFromForce(forceNode);
+        const displacement = subtract(nodePosition, parentPosition);
+        const axis = outwardAxisFromGrandParent(parentPosition, grandParentPosition, displacement);
+        const outwardDistance = dot(displacement, axis);
+        if (outwardDistance > MIN_OUTWARD_DOT) continue;
+
+        const correction = MIN_OUTWARD_DOT - outwardDistance;
+        forceNode.x = nodePosition.x + axis.x * correction;
+        forceNode.y = nodePosition.y + axis.y * correction;
+        forceNode.z = nodePosition.z + axis.z * correction;
+    }
+}
+
+function outwardAxisFromGrandParent(
+    parentPosition: Point,
+    grandParentPosition: Point,
+    fallback: Point
+) {
+    const parentBranch = subtract(parentPosition, grandParentPosition);
+    if (lengthSquared(parentBranch) > 0.01) return normalize(parentBranch);
+    if (lengthSquared(fallback) > 0.01) return normalize(fallback);
+    return { x: 1, y: 0, z: 0 };
+}
+
+function pointFromForce(node: ForceNode): Point {
+    return { x: node.x ?? 0, y: node.y ?? 0, z: node.z ?? 0 };
+}
+
 function createLinks(
     activeNodes: LayoutNode[],
     activeByIndex: ReadonlyMap<number, LayoutNode>,
@@ -397,6 +446,10 @@ function cross(left: Point, right: Point): Point {
         y: left.z * right.x - left.x * right.z,
         z: left.x * right.y - left.y * right.x,
     };
+}
+
+function dot(left: Point, right: Point) {
+    return left.x * right.x + left.y * right.y + left.z * right.z;
 }
 
 function lengthSquared(point: Point) {
