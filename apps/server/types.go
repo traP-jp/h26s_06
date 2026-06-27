@@ -79,11 +79,13 @@ type sseEvent struct {
 }
 
 type triggerPayload struct {
-	Type string `json:"type"`
-	Ch   string `json:"ch,omitempty"`
-	Usr  string `json:"usr,omitempty"`
-	From string `json:"from,omitempty"`
-	To   string `json:"to,omitempty"`
+	Type         string `json:"type"`
+	Ch           string `json:"ch,omitempty"`
+	Usr          string `json:"usr,omitempty"`
+	From         string `json:"from,omitempty"`
+	To           string `json:"to,omitempty"`
+	Source       string `json:"-"`
+	SourceDetail string `json:"-"`
 }
 
 type syncPayload struct {

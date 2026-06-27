@@ -109,6 +109,9 @@ func streamStatus(demo bool) string {
 
 func (s *server) publishTrigger(trigger triggerPayload, activeChannelIDs map[string]bool) {
 	if activeChannelIDs != nil && !triggerInActiveChannels(trigger, activeChannelIDs) {
+		if trigger.Type == "mov" {
+			debugMov(trigger, "", "", "skipped", "destination channel is not in active channel set", 0)
+		}
 		return
 	}
 	applied, changed := s.currentState().applyTrigger(trigger)
@@ -148,10 +151,12 @@ func (s *server) runDemoProducer(ctx context.Context) {
 			} else {
 				userID := users[rand.IntN(len(users))]
 				s.publishTrigger(triggerPayload{
-					Type: "mov",
-					Usr:  userID,
-					From: userChannels[userID],
-					To:   channelID,
+					Type:         "mov",
+					Usr:          userID,
+					From:         userChannels[userID],
+					To:           channelID,
+					Source:       "demo",
+					SourceDetail: "server demo producer",
 				}, nil)
 				userChannels[userID] = channelID
 			}
