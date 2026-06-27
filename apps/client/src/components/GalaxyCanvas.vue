@@ -231,18 +231,18 @@ function updateEdges(now: number) {
         posArray[offset++] = node.y + wyNode;
         posArray[offset++] = node.z + wzNode;
 
-        colArray[colOffset] = baseColors[colOffset] * alpha;
+        colArray[colOffset] = baseColors[colOffset]! * alpha;
         colOffset++;
-        colArray[colOffset] = baseColors[colOffset] * alpha;
+        colArray[colOffset] = baseColors[colOffset]! * alpha;
         colOffset++;
-        colArray[colOffset] = baseColors[colOffset] * alpha;
+        colArray[colOffset] = baseColors[colOffset]! * alpha;
         colOffset++;
 
-        colArray[colOffset] = baseColors[colOffset] * alpha;
+        colArray[colOffset] = baseColors[colOffset]! * alpha;
         colOffset++;
-        colArray[colOffset] = baseColors[colOffset] * alpha;
+        colArray[colOffset] = baseColors[colOffset]! * alpha;
         colOffset++;
-        colArray[colOffset] = baseColors[colOffset] * alpha;
+        colArray[colOffset] = baseColors[colOffset]! * alpha;
         colOffset++;
     }
     positionAttribute.needsUpdate = true;
