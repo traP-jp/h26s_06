@@ -41,6 +41,7 @@ const {
 const authState = ref<AuthState>(isDemoMode ? "authenticated" : "checking");
 const currentUser = ref<AuthUser>();
 const focusId = ref<string | undefined>();
+const focusRevision = ref(0);
 
 const showLoading = computed(
     () => authState.value !== "error" && authState.value !== "forbidden" && !graph.value
@@ -253,6 +254,7 @@ function connectStream() {
                     calculateChannelLayout(graph.value.nodes).then(positions => {
                         if (generation === layoutGeneration) {
                             graph.value?.applyLayout(positions);
+                            if (focusId.value) focusRevision.value += 1;
                         }
                     });
                 }
@@ -302,6 +304,7 @@ watch(selectedId, newId => {
         calculateChannelLayout(graph.value.nodes).then(positions => {
             if (generation === layoutGeneration) {
                 graph.value?.applyLayout(positions);
+                if (focusId.value) focusRevision.value += 1;
             }
         });
     }
@@ -504,6 +507,7 @@ onBeforeUnmount(() => {
             :graph="graph"
             :selected-id="selectedId"
             :focus-id="focusId"
+            :focus-revision="focusRevision"
             :active-only="activeOnly"
             @select="selectedId = $event"
             @render-error="renderError = $event"
