@@ -179,7 +179,7 @@ describe("ChannelGraph score sync", () => {
         channels.leaf!.score = 1.25;
         const graph = new ChannelGraph(channels);
 
-        graph.applyTrigger({ type: "msg", ch: "leaf" });
+        graph.applyTrigger({ type: "msg", ch: "leaf", delta: 1.0 });
 
         expect(graph.get("leaf")!.currentScore).toBe(2.25);
         expect(graph.get("leaf")!.targetScore).toBe(2.25);
