@@ -28,9 +28,9 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 
 import {
-    ACTIVE_RELATIVE_SCORE_THRESHOLD,
     type ChannelDisplayMode,
     type ChannelGraph,
+    isActiveChannelNode,
 } from "../core/channelGraph";
 import type {
     CameraMoveDirection,
@@ -1030,8 +1030,7 @@ function isNodeRendered(node: ChannelGraph["nodes"][number]) {
     if (node.visibilityAlpha < 0.05) return false;
     return (
         !props.activeOnly ||
-        node.relativeScore > ACTIVE_RELATIVE_SCORE_THRESHOLD ||
-        node.activeDescendantScore > 0 ||
+        isActiveChannelNode(node) ||
         node.id === "grand_root" ||
         node.id === props.selectedId
     );

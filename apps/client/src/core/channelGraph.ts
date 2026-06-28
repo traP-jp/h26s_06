@@ -45,6 +45,10 @@ export interface ChannelNode {
     color: string;
 }
 
+export function isActiveChannelNode(node: ChannelNode): boolean {
+    return node.relativeScore > ACTIVE_RELATIVE_SCORE_THRESHOLD || node.activeDescendantScore > 0;
+}
+
 export type VisualEvent =
     | { type: "message"; channelId: string }
     | { type: "mov"; fromId?: string; toId: string };
