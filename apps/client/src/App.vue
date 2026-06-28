@@ -53,6 +53,7 @@ const currentUser = ref<AuthUser>();
 const focusId = ref<string | undefined>();
 const focusRevision = ref(0);
 const settingsOpen = ref(false);
+const detailsOpen = ref(false);
 
 const showLoading = computed(
     () => authState.value !== "error" && authState.value !== "forbidden" && !graph.value
@@ -256,6 +257,8 @@ onMounted(() => {
 });
 
 watch(selectedId, (newId, oldId) => {
+    detailsOpen.value = Boolean(newId);
+
     if (!graph.value) {
         focusId.value = newId;
         return;
@@ -366,9 +369,9 @@ onBeforeUnmount(() => {
         />
 
         <ChannelDetails
-            v-if="selected"
+            v-if="selected && detailsOpen"
             :selected="selected"
-            @close="selectedId = undefined"
+            @close="detailsOpen = false"
         />
 
         <footer
