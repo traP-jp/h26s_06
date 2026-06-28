@@ -189,14 +189,14 @@ func TestStateManagerApplyTriggerUsesMessageLengthScoreDelta(t *testing.T) {
 		Type:             "msg",
 		Ch:               "root",
 		MessageID:        "message-1",
-		MessageLength:    10,
+		MessageLength:    messageScoreReferenceChars,
 		HasMessageLength: true,
 	})
 	if !ok {
 		t.Fatal("message was not applied")
 	}
 
-	want := messageScoreAmount * math.Log1p(10)
+	want := messageScoreAmount
 	if applied.ScoreDelta != want {
 		t.Fatalf("delta = %v, want %v", applied.ScoreDelta, want)
 	}
@@ -205,6 +205,54 @@ func TestStateManagerApplyTriggerUsesMessageLengthScoreDelta(t *testing.T) {
 	state.mu.RUnlock()
 	if score != want {
 		t.Fatalf("root score = %v, want %v", score, want)
+	}
+}
+
+func TestMessageScoreDeltaUsesReferenceCharacterCount(t *testing.T) {
+	tests := []struct {
+		name   string
+		length int
+		want   float64
+	}{
+		{
+			name:   "empty",
+			length: 0,
+			want:   0,
+		},
+		{
+			name:   "single character",
+			length: 1,
+			want: messageScoreAmount *
+				math.Log1p(1) /
+				math.Log1p(float64(messageScoreReferenceChars)),
+		},
+		{
+			name:   "shorter than reference",
+			length: 10,
+			want: messageScoreAmount *
+				math.Log1p(10) /
+				math.Log1p(float64(messageScoreReferenceChars)),
+		},
+		{
+			name:   "reference length",
+			length: messageScoreReferenceChars,
+			want:   messageScoreAmount,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			trigger := triggerPayload{
+				Type:             "msg",
+				Ch:               "root",
+				MessageLength:    tt.length,
+				HasMessageLength: true,
+			}
+
+			if got := messageScoreDelta(trigger); got != tt.want {
+				t.Fatalf("messageScoreDelta() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
