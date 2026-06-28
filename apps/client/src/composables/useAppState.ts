@@ -41,6 +41,9 @@ export function useAppState() {
     const renderError = ref<string>();
     const toastTimers = new Map<number, ReturnType<typeof setTimeout>>();
     let nextToastId = 1;
+    const viewers = ref<string[]>([]);
+    const viewersPending = ref(false);
+    const viewersUnavailable = ref(false);
     const rememberedChildByParent = ref<Record<string, string>>({});
 
     const selected = computed(() => {
@@ -91,6 +94,9 @@ export function useAppState() {
     function resetActivity() {
         graph.value = undefined;
         selectedId.value = undefined;
+        viewers.value = [];
+        viewersPending.value = false;
+        viewersUnavailable.value = false;
         rememberedChildByParent.value = {};
         eventCount.value = 0;
         lastEvent.value = "初期データを待っています";
@@ -157,6 +163,9 @@ export function useAppState() {
         updatedAt,
         eventToasts,
         renderError,
+        viewers,
+        viewersPending,
+        viewersUnavailable,
         selected,
         connectionLabel,
         recordTrigger,
