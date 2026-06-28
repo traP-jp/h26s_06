@@ -316,7 +316,7 @@ func TestParseTraqStreamEventChannelViewersChangedWithoutViewersDoesNotReturnVie
 	}
 	payload := mustMarshalEvent(t, wsEvent{
 		Type: "CHANNEL_VIEWERS_CHANGED",
-		Body: mustMarshalRaw(t, wsChannelViewersChangedBody{ID: "channel-a"}),
+		Body: json.RawMessage(`{"id":"channel-a"}`),
 	})
 
 	event, err := srv.parseTraqStreamEvent(context.Background(), "token", payload, state)
