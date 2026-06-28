@@ -49,6 +49,37 @@ func TestStateManagerApplyTriggerSkipsDuplicateMovement(t *testing.T) {
 	}
 }
 
+func TestStateManagerApplyTriggerAddsMovementScore(t *testing.T) {
+	parentID := "root"
+	state, err := newStateManagerFromTraq([]traqChannel{
+		{ID: parentID, Name: "root"},
+		{ID: "child", Name: "child", ParentID: &parentID},
+	})
+	if err != nil {
+		t.Fatalf("newStateManagerFromTraq returned error: %v", err)
+	}
+
+	applied, ok := state.applyTrigger(triggerPayload{Type: "mov", Usr: "u1", To: "child"})
+	if !ok {
+		t.Fatal("movement was not applied")
+	}
+	if applied.ScoreDelta != movementScoreAmount {
+		t.Fatalf("delta = %v, want %v", applied.ScoreDelta, movementScoreAmount)
+	}
+
+	state.mu.RLock()
+	childScore := state.channels["child"].Score
+	parentScore := state.channels[parentID].Score
+	state.mu.RUnlock()
+	if childScore != movementScoreAmount {
+		t.Fatalf("child score = %v, want %v", childScore, movementScoreAmount)
+	}
+	wantParentScore := movementScoreAmount * ancestorScoreFactor
+	if math.Abs(parentScore-wantParentScore) > 0.000_001 {
+		t.Fatalf("parent score = %v, want %v", parentScore, wantParentScore)
+	}
+}
+
 func TestStateManagerApplyTriggerClearsCurrentChannelWithoutPublishing(t *testing.T) {
 	state, err := newStateManagerFromTraq([]traqChannel{
 		{ID: "a", Name: "a"},
