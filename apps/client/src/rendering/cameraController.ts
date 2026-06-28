@@ -22,8 +22,6 @@ interface CameraTransition {
 
 export class CameraController {
     private transition: CameraTransition | undefined;
-    private readonly projectedRotationCenter = new Vector3();
-    private readonly desiredRotationCenter = new Vector3();
     private readonly projectedPoint = new Vector3();
     private readonly viewportOrigin = new Vector3();
     private readonly shiftedViewportOrigin = new Vector3();
@@ -248,32 +246,6 @@ export class CameraController {
         if (nextPolarAngle > 0.08 && nextPolarAngle < Math.PI - 0.08) {
             this.rotatePose(pivotPosition, cameraRight, pitch);
         }
-    }
-
-    constrainPivotToViewport(pivot: { x: number; y: number; z: number }) {
-        this.projectedRotationCenter.set(pivot.x, pivot.y, pivot.z).project(this.camera);
-        const clampedX = Math.max(
-            -ROTATION_CENTER_VIEWPORT_LIMIT,
-            Math.min(ROTATION_CENTER_VIEWPORT_LIMIT, this.projectedRotationCenter.x)
-        );
-        const clampedY = Math.max(
-            -ROTATION_CENTER_VIEWPORT_LIMIT,
-            Math.min(ROTATION_CENTER_VIEWPORT_LIMIT, this.projectedRotationCenter.y)
-        );
-        if (
-            clampedX === this.projectedRotationCenter.x &&
-            clampedY === this.projectedRotationCenter.y
-        ) {
-            return;
-        }
-
-        this.desiredRotationCenter
-            .set(clampedX, clampedY, this.projectedRotationCenter.z)
-            .unproject(this.camera);
-        const correction = new Vector3(pivot.x, pivot.y, pivot.z).sub(this.desiredRotationCenter);
-        this.camera.position.add(correction);
-        this.controls.target.add(correction);
-        this.camera.updateMatrixWorld();
     }
 
     constrainPointsToViewport(points: readonly { x: number; y: number; z: number }[]) {

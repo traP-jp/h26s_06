@@ -470,7 +470,7 @@ function draw(now: number) {
     const timeUniform = nodes.material.uniforms.uTime;
     if (timeUniform) timeUniform.value = now * 0.001;
     if (!customRotationActive) controls?.update();
-    constrainRotationCenterToViewport();
+    constrainGraphToViewport();
     updateHoverCursor();
     composer.render();
 }
@@ -871,12 +871,7 @@ function rotateAroundSelectedNode(deltaX: number, deltaY: number) {
     cameraController?.rotateAround(pivotNode, deltaX, deltaY, element.clientHeight);
 }
 
-function constrainRotationCenterToViewport() {
-    if (props.focusId) {
-        const pivotNode = props.graph.get(props.focusId);
-        if (pivotNode) cameraController?.constrainPivotToViewport(pivotNode);
-        return;
-    }
+function constrainGraphToViewport() {
     cameraController?.constrainPointsToViewport(props.graph.nodes.filter(isNodeRendered));
 }
 
