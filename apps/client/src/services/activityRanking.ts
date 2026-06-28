@@ -1,4 +1,4 @@
-import type { ChannelNode } from "../core/channelGraph";
+import { type ChannelNode, isActiveChannelNode } from "../core/channelGraph";
 
 export interface ActivityChannel {
     id: string;
@@ -7,11 +7,9 @@ export interface ActivityChannel {
     color: string;
 }
 
-export function rankActivityChannels(nodes: readonly ChannelNode[], limit = 5): ActivityChannel[] {
-    if (limit <= 0) return [];
-
+export function rankActivityChannels(nodes: readonly ChannelNode[]): ActivityChannel[] {
     return nodes
-        .filter(node => node.id !== "grand_root" && node.relativeScore > 0)
+        .filter(node => node.id !== "grand_root" && isActiveChannelNode(node))
         .toSorted(
             (left, right) =>
                 right.relativeScore - left.relativeScore ||
@@ -21,7 +19,6 @@ export function rankActivityChannels(nodes: readonly ChannelNode[], limit = 5): 
                     sensitivity: "base",
                 })
         )
-        .slice(0, limit)
         .map(node => ({
             id: node.id,
             name: node.name,

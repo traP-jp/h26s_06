@@ -244,9 +244,16 @@ h2 {
 .activity-channels ol {
     display: grid;
     gap: 3px;
+    max-height: 167px;
     margin: 10px 0 0;
     padding: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
     list-style: none;
+}
+
+.activity-channels ol::-webkit-scrollbar {
+    display: none;
 }
 
 .activity-channels li {

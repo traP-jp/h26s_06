@@ -7,7 +7,8 @@ function createNode(
     id: string,
     relativeScore: number,
     currentScore = relativeScore,
-    name = id
+    name = id,
+    activeDescendantScore = 0
 ): ChannelNode {
     return {
         index: 0,
@@ -30,13 +31,13 @@ function createNode(
         isLayoutActive: true,
         isExpansionOrigin: false,
         emphasis: 1,
-        activeDescendantScore: 0,
+        activeDescendantScore,
         color: "#00bfff",
     };
 }
 
 describe("rankActivityChannels", () => {
-    test("returns at most five active channels in descending heat order", () => {
+    test("returns all active channels in descending heat order", () => {
         const nodes = [
             createNode("grand_root", 1),
             createNode("sixth", 0.1),
@@ -44,6 +45,8 @@ describe("rankActivityChannels", () => {
             createNode("fifth", 0.2),
             createNode("first", 1.2),
             createNode("inactive", 0),
+            createNode("threshold", 0.08),
+            createNode("active-parent", 0, 0, "active-parent", 0.6),
             createNode("fourth", 0.4),
             createNode("third", 0.6),
         ];
@@ -54,6 +57,13 @@ describe("rankActivityChannels", () => {
             { id: "third", name: "third", heat: 60, color: "#00bfff" },
             { id: "fourth", name: "fourth", heat: 40, color: "#00bfff" },
             { id: "fifth", name: "fifth", heat: 20, color: "#00bfff" },
+            { id: "sixth", name: "sixth", heat: 10, color: "#00bfff" },
+            {
+                id: "active-parent",
+                name: "active-parent",
+                heat: 0,
+                color: "#00bfff",
+            },
         ]);
     });
 
@@ -64,14 +74,10 @@ describe("rankActivityChannels", () => {
             createNode("alpha-1", 0.5, 1, "alpha-1"),
         ];
 
-        expect(rankActivityChannels(nodes, 3).map(channel => channel.id)).toEqual([
+        expect(rankActivityChannels(nodes).map(channel => channel.id)).toEqual([
             "beta",
             "alpha-1",
             "alpha-2",
         ]);
-    });
-
-    test("returns no channels when the limit is not positive", () => {
-        expect(rankActivityChannels([createNode("general", 1)], 0)).toEqual([]);
     });
 });

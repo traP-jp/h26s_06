@@ -2,6 +2,7 @@ import {
     ACTIVE_RELATIVE_SCORE_THRESHOLD,
     type ChannelDisplayMode,
     type ChannelNode,
+    isActiveChannelNode,
 } from "./channelGraph";
 
 const MATRIX_SIZE = 16;
@@ -38,8 +39,7 @@ export class NodeBuffer {
             const selectedScale = node.id === selectedId ? 1.8 : 1;
             const visible =
                 !activeOnly ||
-                node.relativeScore > ACTIVE_RELATIVE_SCORE_THRESHOLD ||
-                node.activeDescendantScore > 0 ||
+                isActiveChannelNode(node) ||
                 node.id === "grand_root" ||
                 node.id === selectedId;
             const activeAncestorOnly =
