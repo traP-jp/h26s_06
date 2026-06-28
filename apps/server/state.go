@@ -14,15 +14,15 @@ const (
 	recentMessageIDLimit = 100
 	maxSyncPayloadDeltas = 100
 
-  messageScoreAmount         = 1.0
-  messageScoreReferenceChars = 20
-  movementScoreAmount        = 0.025
-  ancestorScoreFactor        = 0.45
-  scoreDecayTimeScale        = 300.0
-  messageCountTimeScale      = 300.0
-  minMessageCount            = 0.01
-  syncDeltaWeightScale       = 10.0
-  viewerScoreWeight          = 0.46
+	messageScoreAmount         = 1.0
+	messageScoreReferenceChars = 20
+	movementScoreAmount        = 0.025
+	ancestorScoreFactor        = 0.45
+	scoreDecayTimeScale        = 300.0
+	messageCountTimeScale      = 300.0
+	minMessageCount            = 0.01
+	syncDeltaWeightScale       = 10.0
+	viewerScoreWeight          = 0.46
 )
 
 type channel struct {
@@ -224,6 +224,47 @@ func prepareChannelTimes(channels map[string]*channel, now time.Time) {
 			ch.LastDecayTime = now
 		}
 	}
+}
+
+func (sm *stateManager) restoreScoreRecords(records map[string]scoreRecord) int {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	restored := 0
+	for id, record := range records {
+		ch := sm.channels[id]
+		if ch == nil {
+			continue
+		}
+		ch.Score = record.Score
+		if !record.LastSyncTime.IsZero() {
+			ch.LastSyncTime = record.LastSyncTime
+		}
+		if !record.LastDecayTime.IsZero() {
+			ch.LastDecayTime = record.LastDecayTime
+		}
+		ch.LastViewTime = record.LastViewTime
+		restored++
+	}
+	return restored
+}
+
+func (sm *stateManager) scoreRecords() []scoreRecord {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	records := make([]scoreRecord, 0, len(sm.channels))
+	for _, ch := range sm.channels {
+		records = append(records, scoreRecord{
+			ChannelID:     ch.ID,
+			Score:         ch.Score,
+			LastSyncScore: ch.LastSyncScore,
+			LastSyncTime:  ch.LastSyncTime,
+			LastDecayTime: ch.LastDecayTime,
+			LastViewTime:  ch.LastViewTime,
+		})
+	}
+	return records
 }
 
 func (sm *stateManager) initPayloadBytes() []byte {

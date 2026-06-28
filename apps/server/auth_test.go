@@ -67,6 +67,110 @@ func TestSessionTokenRejectsExpiredSession(t *testing.T) {
 	}
 }
 
+func TestSessionTokenLoadsPersistedSession(t *testing.T) {
+	srv, err := newServer(config{})
+	if err != nil {
+		t.Fatalf("newServer returned error: %v", err)
+	}
+	expiresAt := time.Now().Add(time.Hour)
+	srv.store = &fakePersistenceStore{
+		sessions: map[string]authSession{
+			"persisted-session": {
+				Token:     tokenResponse{AccessToken: "persisted-access-token"},
+				ExpiresAt: expiresAt,
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/events", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "persisted-session"})
+
+	token, ok := srv.sessionToken(req)
+	if !ok {
+		t.Fatal("sessionToken rejected persisted session")
+	}
+	if token.AccessToken != "persisted-access-token" {
+		t.Fatalf("access token = %q, want persisted-access-token", token.AccessToken)
+	}
+	if _, ok := srv.sessions["persisted-session"]; !ok {
+		t.Fatal("persisted session was not cached in memory")
+	}
+}
+
+func TestSessionTokenDeletesExpiredPersistedSession(t *testing.T) {
+	srv, err := newServer(config{})
+	if err != nil {
+		t.Fatalf("newServer returned error: %v", err)
+	}
+	store := &fakePersistenceStore{
+		sessions: map[string]authSession{
+			"expired-persisted-session": {
+				Token:     tokenResponse{AccessToken: "expired-access-token"},
+				ExpiresAt: time.Now().Add(-time.Second),
+			},
+		},
+	}
+	srv.store = store
+
+	req := httptest.NewRequest(http.MethodGet, "/api/events", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "expired-persisted-session"})
+
+	if token, ok := srv.sessionToken(req); ok {
+		t.Fatalf("sessionToken returned ok with token %#v, want expired session rejection", token)
+	}
+	if !store.deleted["expired-persisted-session"] {
+		t.Fatal("expired persisted session was not deleted")
+	}
+}
+
+type fakePersistenceStore struct {
+	sessions map[string]authSession
+	deleted  map[string]bool
+}
+
+func (s *fakePersistenceStore) SaveAuthSession(_ context.Context, sessionID string, session authSession) error {
+	if s.sessions == nil {
+		s.sessions = map[string]authSession{}
+	}
+	s.sessions[sessionID] = session
+	return nil
+}
+
+func (s *fakePersistenceStore) FindAuthSession(_ context.Context, sessionID string) (authSession, bool, error) {
+	session, ok := s.sessions[sessionID]
+	return session, ok, nil
+}
+
+func (s *fakePersistenceStore) DeleteAuthSession(_ context.Context, sessionID string) error {
+	if s.deleted == nil {
+		s.deleted = map[string]bool{}
+	}
+	s.deleted[sessionID] = true
+	delete(s.sessions, sessionID)
+	return nil
+}
+
+func (s *fakePersistenceStore) DeleteExpiredAuthSessions(_ context.Context, now time.Time) error {
+	for sessionID, session := range s.sessions {
+		if !now.Before(session.ExpiresAt) {
+			_ = s.DeleteAuthSession(context.Background(), sessionID)
+		}
+	}
+	return nil
+}
+
+func (s *fakePersistenceStore) LoadChannelScores(context.Context) (map[string]scoreRecord, error) {
+	return nil, nil
+}
+
+func (s *fakePersistenceStore) SaveChannelScores(context.Context, []scoreRecord) error {
+	return nil
+}
+
+func (s *fakePersistenceStore) Close() error {
+	return nil
+}
+
 func TestHandleCallbackStoresTraqUserIDInSession(t *testing.T) {
 	srv, err := newServer(config{
 		appOrigin:        "http://localhost:5173",
