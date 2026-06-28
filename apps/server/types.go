@@ -21,6 +21,7 @@ const (
 type server struct {
 	cfg    config
 	client *http.Client
+	store  persistenceStore
 
 	authMu   sync.Mutex
 	states   map[string]time.Time
@@ -61,6 +62,15 @@ type channel struct {
 	LastSyncTime  time.Time
 	LastDecayTime time.Time
 	LastViewTime  time.Time
+}
+
+type scoreRecord struct {
+	ChannelID      string
+	Score          float64
+	LastSyncScore  float64
+	LastSyncTime   time.Time
+	LastDecayTime  time.Time
+	LastViewTime   time.Time
 }
 
 type userState struct {

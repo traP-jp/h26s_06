@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -10,14 +12,34 @@ import (
 )
 
 func newServer(cfg config) (*server, error) {
+	if cfg.mariaDB.incomplete() {
+		return nil, fmt.Errorf("incomplete MariaDB config: missing %s", strings.Join(cfg.mariaDB.missing, ", "))
+	}
+
+	var store persistenceStore
+	if cfg.mariaDB.enabled() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		mariaDBStore, err := openMariaDBStore(ctx, cfg.mariaDB)
+		if err != nil {
+			return nil, fmt.Errorf("connect MariaDB: %w", err)
+		}
+		store = mariaDBStore
+		traqLogOK("MariaDB persistence enabled")
+	}
+
 	demoState, err := newDemoStateManager()
 	if err != nil {
+		if store != nil {
+			_ = store.Close()
+		}
 		return nil, err
 	}
 
 	return &server{
 		cfg:          cfg,
 		client:       &http.Client{Timeout: 15 * time.Second},
+		store:        store,
 		states:       map[string]time.Time{},
 		sessions:     map[string]authSession{},
 		userBotCache: map[string]bool{},
@@ -78,8 +100,19 @@ func (s *server) close() {
 	if s.liveSyncCancel != nil {
 		s.liveSyncCancel()
 	}
+	s.liveMu.Lock()
+	liveState := s.liveData.State
+	s.liveMu.Unlock()
+	if liveState != nil {
+		s.persistChannelScores(liveState)
+	}
 	s.demoHub.close()
 	s.liveHub.close()
+	if s.store != nil {
+		if err := s.store.Close(); err != nil {
+			traqLogWarn("close persistence store: %v", err)
+		}
+	}
 }
 
 func (s *server) startAuthCleanup(ctx context.Context) {
@@ -120,7 +153,7 @@ func (s *server) startLiveSyncProducer(state *stateManager) {
 	s.liveSyncOnce.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		s.liveSyncCancel = cancel
-		go s.runSyncProducer(ctx, state, s.liveHub)
+		go s.runLiveSyncProducer(ctx, state, s.liveHub)
 	})
 }
 
