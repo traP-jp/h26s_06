@@ -16,7 +16,7 @@ const (
 
 	messageScoreAmount         = 1.0
 	messageScoreReferenceChars = 20
-	movementScoreAmount        = 0.25
+	movementScoreAmount        = 0.025
 	ancestorScoreFactor        = 0.45
 	scoreDecayTimeScale        = 300.0
 	syncDeltaWeightScale       = 10.0
