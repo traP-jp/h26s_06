@@ -343,7 +343,7 @@ func messageScoreDelta(trigger triggerPayload) float64 {
 	if trigger.MessageLength <= 0 {
 		return 0
 	}
-	return messageScoreAmount * math.Log(float64(trigger.MessageLength))
+	return messageScoreAmount * math.Log1p(float64(trigger.MessageLength))
 }
 
 func (sm *stateManager) rememberMessageIDLocked(messageID string) {

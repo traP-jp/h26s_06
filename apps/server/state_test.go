@@ -196,7 +196,7 @@ func TestStateManagerApplyTriggerUsesMessageLengthScoreDelta(t *testing.T) {
 		t.Fatal("message was not applied")
 	}
 
-	want := messageScoreAmount * math.Log(10)
+	want := messageScoreAmount * math.Log1p(10)
 	if applied.ScoreDelta != want {
 		t.Fatalf("delta = %v, want %v", applied.ScoreDelta, want)
 	}
