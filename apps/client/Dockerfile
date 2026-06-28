@@ -14,7 +14,7 @@ FROM oven/bun:1-alpine AS runner
 
 WORKDIR /app
 
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/dist /dist
 COPY scripts/serveCloudRun.ts ./scripts/serveCloudRun.ts
 
 EXPOSE 5173

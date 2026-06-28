@@ -2,7 +2,7 @@
 
 import { extname, normalize, resolve, sep } from "node:path";
 
-const distRoot = resolve(import.meta.dir, "../dist");
+const distRoot = "/dist";
 const port = getPort(process.env.PORT);
 const backendProxyEnabled = isTruthy(process.env.GCLOUD_BACKEND_PROXY);
 const serverUpstream = backendProxyEnabled
