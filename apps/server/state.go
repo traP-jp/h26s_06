@@ -169,7 +169,6 @@ func (sm *stateManager) restoreScoreRecords(records map[string]scoreRecord) int 
 			continue
 		}
 		ch.Score = record.Score
-		ch.LastSyncScore = record.LastSyncScore
 		if !record.LastSyncTime.IsZero() {
 			ch.LastSyncTime = record.LastSyncTime
 		}
@@ -189,12 +188,12 @@ func (sm *stateManager) scoreRecords() []scoreRecord {
 	records := make([]scoreRecord, 0, len(sm.channels))
 	for _, ch := range sm.channels {
 		records = append(records, scoreRecord{
-			ChannelID:      ch.ID,
-			Score:          ch.Score,
-			LastSyncScore:  ch.LastSyncScore,
-			LastSyncTime:   ch.LastSyncTime,
-			LastDecayTime:  ch.LastDecayTime,
-			LastViewTime:   ch.LastViewTime,
+			ChannelID:     ch.ID,
+			Score:         ch.Score,
+			LastSyncScore: ch.LastSyncScore,
+			LastSyncTime:  ch.LastSyncTime,
+			LastDecayTime: ch.LastDecayTime,
+			LastViewTime:  ch.LastViewTime,
 		})
 	}
 	return records

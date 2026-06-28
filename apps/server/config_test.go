@@ -7,6 +7,7 @@ func TestLoadMariaDBConfigRequiresAllNeoShowcaseKeys(t *testing.T) {
 	t.Setenv("NS_MARIADB_HOSTNAME", "db")
 	t.Setenv("NS_MARIADB_PASSWORD", "")
 	t.Setenv("NS_MARIADB_PORT", "3306")
+	t.Setenv("NS_MARIADB_USER", "")
 
 	cfg := loadMariaDBConfig()
 	if !cfg.incomplete() {
