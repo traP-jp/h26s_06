@@ -38,12 +38,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/server
+          tags: type=raw,value=latest
+
       - name: Build and push server image
         uses: docker/build-push-action@v6
         with:
           context: apps/server
           push: ${{ github.event_name == 'push' }}
-          tags: ghcr.io/${{ github.repository }}/server:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -66,11 +74,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/client
+          tags: type=raw,value=latest
+
       - name: Build and push client image
         uses: docker/build-push-action@v6
         with:
           context: apps/client
           push: ${{ github.event_name == 'push' }}
-          tags: ghcr.io/${{ github.repository }}/client:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
