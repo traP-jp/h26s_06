@@ -4,7 +4,7 @@ import { extname, normalize, resolve, sep } from "node:path";
 
 const distRoot = "/dist";
 const port = getPort(process.env.PORT);
-const backendProxyEnabled = isTruthy(process.env.GCLOUD_BACKEND_PROXY);
+const backendProxyEnabled = shouldProxyBackend(process.env.GCLOUD_BACKEND_PROXY);
 const serverUpstream = backendProxyEnabled
     ? new URL("http://localhost:8080")
     : null;
@@ -64,6 +64,36 @@ function isTruthy(value: string | undefined): boolean {
         normalizedValue === "yes" ||
         normalizedValue === "on"
     );
+}
+
+function isFalsy(value: string | undefined): boolean {
+    const normalizedValue = value?.toLowerCase();
+
+    return (
+        normalizedValue === "0" ||
+        normalizedValue === "false" ||
+        normalizedValue === "no" ||
+        normalizedValue === "off"
+    );
+}
+
+function isCloudRun(): boolean {
+    return (
+        process.env.K_SERVICE !== undefined ||
+        process.env.K_REVISION !== undefined ||
+        process.env.K_CONFIGURATION !== undefined
+    );
+}
+
+function shouldProxyBackend(value: string | undefined): boolean {
+    if (isTruthy(value)) {
+        return true;
+    }
+    if (isFalsy(value)) {
+        return false;
+    }
+
+    return isCloudRun();
 }
 
 async function proxyApiRequest(
