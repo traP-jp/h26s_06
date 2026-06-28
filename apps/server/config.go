@@ -20,6 +20,17 @@ type config struct {
 	syncInterval          time.Duration
 	viewerPollInterval    time.Duration
 	viewerChannelsPerTick int
+	mariaDB               mariaDBConfig
+}
+
+type mariaDBConfig struct {
+	database string
+	hostname string
+	password string
+	port     string
+	user     string
+	missing  []string
+	present  bool
 }
 
 func loadConfig() config {
@@ -35,7 +46,51 @@ func loadConfig() config {
 		syncInterval:          envDuration("SYNC_INTERVAL", 30*time.Second),
 		viewerPollInterval:    envDuration("VIEWER_POLL_INTERVAL", 20*time.Second),
 		viewerChannelsPerTick: envInt("VIEWER_POLL_CHANNELS", 40),
+		mariaDB:               loadMariaDBConfig(),
 	}
+}
+
+func loadMariaDBConfig() mariaDBConfig {
+	keys := []string{
+		"NS_MARIADB_DATABASE",
+		"NS_MARIADB_HOSTNAME",
+		"NS_MARIADB_PASSWORD",
+		"NS_MARIADB_PORT",
+		"NS_MARIADB_USER",
+	}
+	values := map[string]string{}
+	present := false
+	missing := []string{}
+	for _, key := range keys {
+		value, ok := os.LookupEnv(key)
+		if ok {
+			present = true
+			values[key] = value
+		}
+		if !ok || (key != "NS_MARIADB_PASSWORD" && strings.TrimSpace(value) == "") {
+			missing = append(missing, key)
+		}
+	}
+	if !present {
+		return mariaDBConfig{}
+	}
+	return mariaDBConfig{
+		database: values["NS_MARIADB_DATABASE"],
+		hostname: values["NS_MARIADB_HOSTNAME"],
+		password: values["NS_MARIADB_PASSWORD"],
+		port:     values["NS_MARIADB_PORT"],
+		user:     values["NS_MARIADB_USER"],
+		missing:  missing,
+		present:  true,
+	}
+}
+
+func (cfg mariaDBConfig) enabled() bool {
+	return cfg.present && len(cfg.missing) == 0
+}
+
+func (cfg mariaDBConfig) incomplete() bool {
+	return cfg.present && len(cfg.missing) > 0
 }
 
 func envString(key string, fallback string) string {

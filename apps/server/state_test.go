@@ -493,6 +493,52 @@ func TestStateManagerSyncPayloadDoesNotDoubleDecayUnselectedChannels(t *testing.
 	}
 }
 
+func TestStateManagerRestoresKnownChannelScores(t *testing.T) {
+	state, err := newStateManagerFromTraq([]traqChannel{
+		{ID: "known", Name: "known"},
+		{ID: "empty", Name: "empty"},
+	})
+	if err != nil {
+		t.Fatalf("newStateManagerFromTraq returned error: %v", err)
+	}
+	now := time.Now().UTC()
+
+	restored := state.restoreScoreRecords(map[string]scoreRecord{
+		"known": {
+			ChannelID:     "known",
+			Score:         7.5,
+			LastSyncScore: 7,
+			LastSyncTime:  now.Add(-time.Minute),
+			LastDecayTime: now,
+			LastViewTime:  now.Add(-2 * time.Minute),
+		},
+		"missing": {
+			ChannelID: "missing",
+			Score:     99,
+		},
+	})
+	if restored != 1 {
+		t.Fatalf("restored = %d, want 1", restored)
+	}
+
+	state.mu.RLock()
+	known := state.channels["known"]
+	empty := state.channels["empty"]
+	state.mu.RUnlock()
+	if known.Score != 7.5 {
+		t.Fatalf("known score = %v, want 7.5", known.Score)
+	}
+	if known.LastSyncScore != 7 {
+		t.Fatalf("known last sync score = %v, want 7", known.LastSyncScore)
+	}
+	if known.LastViewTime.IsZero() {
+		t.Fatal("known last view time was not restored")
+	}
+	if empty.Score != 0 {
+		t.Fatalf("empty score = %v, want 0", empty.Score)
+	}
+}
+
 func TestEnsureLiveChannelDataKeepsDemoAndLiveStateSeparate(t *testing.T) {
 	hits := 0
 	srv, err := newServer(config{traqBaseURL: "https://example.test", traqBotAccessToken: "bot-token"})

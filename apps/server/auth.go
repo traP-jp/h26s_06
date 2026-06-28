@@ -110,15 +110,25 @@ func (s *server) handleCallback(c echo.Context) error {
 
 	sessionMaxAge := token.ExpiresIn
 	sessionExpiresAt := time.Now().Add(time.Duration(sessionMaxAge) * time.Second)
-
-	s.authMu.Lock()
-	s.sessions[sessionID] = authSession{
+	session := authSession{
 		Token:      token,
 		ExpiresAt:  sessionExpiresAt,
 		TraqUserID: traqUserID,
 		TraqName:   me.traqName(),
 	}
+
+	s.authMu.Lock()
+	s.sessions[sessionID] = session
 	s.authMu.Unlock()
+	if s.store != nil {
+		if err := s.store.SaveAuthSession(r.Context(), sessionID, session); err != nil {
+			s.authMu.Lock()
+			delete(s.sessions, sessionID)
+			s.authMu.Unlock()
+			traqLogError("persist oauth session failed: %v", err)
+			return echoHTTPError(c, "failed to persist session", http.StatusInternalServerError)
+		}
+	}
 
 	c.SetCookie(&http.Cookie{
 		Name:     sessionCookieName,
@@ -159,6 +169,11 @@ func (s *server) handleLogout(c echo.Context) error {
 		s.authMu.Lock()
 		delete(s.sessions, cookie.Value)
 		s.authMu.Unlock()
+		if s.store != nil {
+			if err := s.store.DeleteAuthSession(r.Context(), cookie.Value); err != nil {
+				traqLogWarn("delete persisted oauth session failed: %v", err)
+			}
+		}
 	}
 	c.SetCookie(&http.Cookie{
 		Name:     sessionCookieName,
@@ -224,16 +239,39 @@ func (s *server) session(r *http.Request) (string, authSession, bool) {
 	if err != nil {
 		return "", authSession{}, false
 	}
+
 	s.authMu.Lock()
-	defer s.authMu.Unlock()
 	session, ok := s.sessions[cookie.Value]
+	if ok && !time.Now().Before(session.ExpiresAt) {
+		delete(s.sessions, cookie.Value)
+		s.authMu.Unlock()
+		s.deletePersistedAuthSession(r.Context(), cookie.Value)
+		return "", authSession{}, false
+	}
+	if ok {
+		s.authMu.Unlock()
+		return cookie.Value, session, true
+	}
+	s.authMu.Unlock()
+
+	if s.store == nil {
+		return "", authSession{}, false
+	}
+	session, ok, err = s.store.FindAuthSession(r.Context(), cookie.Value)
+	if err != nil {
+		traqLogWarn("load persisted oauth session failed: %v", err)
+		return "", authSession{}, false
+	}
 	if !ok {
 		return "", authSession{}, false
 	}
 	if !time.Now().Before(session.ExpiresAt) {
-		delete(s.sessions, cookie.Value)
+		s.deletePersistedAuthSession(r.Context(), cookie.Value)
 		return "", authSession{}, false
 	}
+	s.authMu.Lock()
+	s.sessions[cookie.Value] = session
+	s.authMu.Unlock()
 	return cookie.Value, session, true
 }
 
@@ -286,7 +324,6 @@ func (s *server) ensureSessionTraqMe(ctx context.Context, sessionID string, sess
 
 func (s *server) cleanupExpiredAuth(now time.Time) {
 	s.authMu.Lock()
-	defer s.authMu.Unlock()
 	for state, expiresAt := range s.states {
 		if !now.Before(expiresAt) {
 			delete(s.states, state)
@@ -296,6 +333,23 @@ func (s *server) cleanupExpiredAuth(now time.Time) {
 		if !now.Before(session.ExpiresAt) {
 			delete(s.sessions, sessionID)
 		}
+	}
+	s.authMu.Unlock()
+	if s.store != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.store.DeleteExpiredAuthSessions(ctx, now); err != nil {
+			traqLogWarn("delete expired persisted oauth sessions failed: %v", err)
+		}
+	}
+}
+
+func (s *server) deletePersistedAuthSession(ctx context.Context, sessionID string) {
+	if s.store == nil {
+		return
+	}
+	if err := s.store.DeleteAuthSession(ctx, sessionID); err != nil {
+		traqLogWarn("delete persisted oauth session failed: %v", err)
 	}
 }
 

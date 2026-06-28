@@ -3,6 +3,7 @@ module github.com/traP-jp/h26s_06-server
 go 1.23.0
 
 require (
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gorilla/websocket v1.5.3
 	github.com/labstack/echo/v4 v4.13.4
 )
