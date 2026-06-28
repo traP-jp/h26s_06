@@ -9,6 +9,9 @@ const MATRIX_SIZE = 16;
 const COLOR_SIZE = 3;
 const ACTIVE_ANCESTOR_VISUAL_WEIGHT = 0.42;
 const ALL_CHANNEL_NODE_SCALE = 1.42;
+const FILTER_FADE_IN_RATE = 6;
+const FILTER_FADE_OUT_RATE = 24;
+const MAX_FRAME_DELTA_SECONDS = 0.1;
 
 /**
  * ChannelGraph と GPU の境界。行列と色を連続した TypedArray に保持し、
@@ -17,10 +20,13 @@ const ALL_CHANNEL_NODE_SCALE = 1.42;
 export class NodeBuffer {
     readonly matrixData: Float32Array;
     readonly colorData: Float32Array;
+    private readonly filterVisibility: Float32Array;
+    private lastUpdateTime: number | undefined;
 
     constructor(readonly count: number) {
         this.matrixData = new Float32Array(count * MATRIX_SIZE);
         this.colorData = new Float32Array(count * COLOR_SIZE);
+        this.filterVisibility = new Float32Array(count);
     }
 
     update(
@@ -30,6 +36,14 @@ export class NodeBuffer {
         activeOnly = false,
         displayMode: ChannelDisplayMode = "collapsed"
     ) {
+        const deltaSeconds =
+            this.lastUpdateTime === undefined
+                ? undefined
+                : Math.min(
+                      Math.max(0, (now - this.lastUpdateTime) / 1000),
+                      MAX_FRAME_DELTA_SECONDS
+                  );
+        this.lastUpdateTime = now;
         const displayModeScale = displayMode === "all" ? ALL_CHANNEL_NODE_SCALE : 1;
         for (let index = 0; index < nodes.length; index += 1) {
             const node = nodes[index];
@@ -42,6 +56,17 @@ export class NodeBuffer {
                 isActiveChannelNode(node) ||
                 node.id === "grand_root" ||
                 node.id === selectedId;
+            const targetFilterVisibility = Number(visible);
+            const currentFilterVisibility = this.filterVisibility[index] ?? 0;
+            const filterVisibility =
+                deltaSeconds === undefined
+                    ? targetFilterVisibility
+                    : blendVisibility(
+                          currentFilterVisibility,
+                          targetFilterVisibility,
+                          deltaSeconds
+                      );
+            this.filterVisibility[index] = filterVisibility;
             const activeAncestorOnly =
                 activeOnly &&
                 node.activeDescendantScore > 0 &&
@@ -62,7 +87,7 @@ export class NodeBuffer {
                 node.emphasis *
                 displayWeight *
                 displayModeScale *
-                Number(visible) *
+                filterVisibility *
                 node.visibilityAlpha;
 
             const waverX = Math.sin(now * 0.0008 + index * 1.2) * 1.5;
@@ -78,6 +103,16 @@ export class NodeBuffer {
             );
         }
     }
+
+    filterVisibilityAt(index: number) {
+        return this.filterVisibility[index] ?? 0;
+    }
+}
+
+function blendVisibility(current: number, target: number, deltaSeconds: number) {
+    const rate = target < current ? FILTER_FADE_OUT_RATE : FILTER_FADE_IN_RATE;
+    const blend = 1 - Math.exp(-deltaSeconds * rate);
+    return current + (target - current) * blend;
 }
 
 function writeMatrix(

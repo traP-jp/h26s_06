@@ -27,11 +27,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 
-import {
-    type ChannelDisplayMode,
-    type ChannelGraph,
-    isActiveChannelNode,
-} from "../core/channelGraph";
+import { type ChannelDisplayMode, type ChannelGraph } from "../core/channelGraph";
 import type {
     CameraMoveDirection,
     CameraRotationDirection,
@@ -1027,13 +1023,7 @@ function pickNodeAt(x: number, y: number, bounds: DOMRect) {
 }
 
 function isNodeRendered(node: ChannelGraph["nodes"][number]) {
-    if (node.visibilityAlpha < 0.05) return false;
-    return (
-        !props.activeOnly ||
-        isActiveChannelNode(node) ||
-        node.id === "grand_root" ||
-        node.id === props.selectedId
-    );
+    return node.visibilityAlpha * nodeBuffer.filterVisibilityAt(node.index) >= 0.05;
 }
 
 function onContextLost(event: Event) {
