@@ -10,6 +10,8 @@ export type CameraMoveDirection = "up" | "down" | "left" | "right";
 export type CameraZoomDirection = "in" | "out";
 export type CameraRotationDirection = "up" | "down" | "left" | "right";
 
+const GRAND_ROOT_ID = "grand_root";
+
 interface SelectedChannel {
     navigation?: KeyboardNavigation;
 }
@@ -47,6 +49,10 @@ export class KeyboardController {
 
     toggleMute(): void {
         this.options.onMuteToggle();
+    }
+
+    selectGrandRoot(): void {
+        this.options.setSelectedId(GRAND_ROOT_ID);
     }
 
     navigate(target: KeyboardNavigationTarget): boolean {
