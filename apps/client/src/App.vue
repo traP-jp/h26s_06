@@ -12,7 +12,12 @@ import { useAppState } from "./composables/useAppState";
 import { useAudioSettings } from "./composables/useAudioSettings";
 import { useBackgroundSync } from "./composables/useBackgroundSync";
 import { ChannelGraph } from "./core/channelGraph";
-import { KeyboardController } from "./core/keyboardController";
+import {
+    type CameraMoveDirection,
+    type CameraRotationDirection,
+    type CameraZoomDirection,
+    KeyboardController,
+} from "./core/keyboardController";
 import { beginLogin, fetchCurrentUser } from "./services/auth";
 import { calculateChannelLayout } from "./services/channelLayout";
 import { ChannelStatus } from "./services/channelStatus";
@@ -21,6 +26,12 @@ import { KeyboardManager } from "./services/keyboardManager";
 import type { AuthUser, ViewersPayload } from "./types/api";
 
 type AuthState = "checking" | "authenticated" | "error" | "forbidden";
+interface GalaxyCanvasControls {
+    setCameraMoveActive: (direction: CameraMoveDirection, active: boolean) => void;
+    setCameraZoomActive: (direction: CameraZoomDirection, active: boolean) => void;
+    setCameraRotationActive: (direction: CameraRotationDirection, active: boolean) => void;
+    releaseCameraControls: () => void;
+}
 
 const isDemoMode = new URLSearchParams(window.location.search).get("demo") === "1";
 const SELECTED_LAYOUT_DEBOUNCE_MS = 120;
@@ -91,6 +102,7 @@ const channelStatus = isDemoMode
               viewersUnavailable.value = true;
           },
       });
+const galaxyCanvas = ref<GalaxyCanvasControls>();
 
 const showLoading = computed(
     () => authState.value !== "error" && authState.value !== "forbidden" && !graph.value
@@ -125,6 +137,18 @@ const keyboardController = new KeyboardController({
     onMuteToggle: toggleMuted,
     onSettingsOpen: openSettings,
     onSettingsClose: closeSettings,
+    onCameraMoveChange: (direction, active) => {
+        galaxyCanvas.value?.setCameraMoveActive(direction, active);
+    },
+    onCameraZoomChange: (direction, active) => {
+        galaxyCanvas.value?.setCameraZoomActive(direction, active);
+    },
+    onCameraRotateChange: (direction, active) => {
+        galaxyCanvas.value?.setCameraRotationActive(direction, active);
+    },
+    onCameraControlsRelease: () => {
+        galaxyCanvas.value?.releaseCameraControls();
+    },
 });
 const keyboardManager = new KeyboardManager(keyboardController);
 
@@ -378,6 +402,7 @@ onBeforeUnmount(() => {
 
         <GalaxyCanvas
             v-if="graph"
+            ref="galaxyCanvas"
             :graph="graph"
             :selected-id="selectedId"
             :focus-id="focusId"
