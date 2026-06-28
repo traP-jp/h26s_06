@@ -11,7 +11,7 @@ import SettingsDrawer from "./components/SettingsDrawer.vue";
 import { useAppState } from "./composables/useAppState";
 import { useAudioSettings } from "./composables/useAudioSettings";
 import { useBackgroundSync } from "./composables/useBackgroundSync";
-import { ChannelGraph } from "./core/channelGraph";
+import { type ChannelDisplayMode, ChannelGraph } from "./core/channelGraph";
 import {
     type CameraMoveDirection,
     type CameraRotationDirection,
@@ -49,6 +49,7 @@ const {
     status,
     selectedId,
     activeOnly,
+    displayMode,
     eventCount,
     updatedAt,
     eventToasts,
@@ -110,6 +111,7 @@ const galaxyCanvas = ref<GalaxyCanvasControls>();
 const showLoading = computed(
     () => authState.value !== "error" && authState.value !== "forbidden" && !graph.value
 );
+const effectiveActiveOnly = computed(() => displayMode.value === "collapsed" && activeOnly.value);
 
 function reloadPage(): void {
     window.location.reload();
@@ -155,12 +157,17 @@ const keyboardController = new KeyboardController({
 });
 const keyboardManager = new KeyboardManager(keyboardController);
 
-function scheduleLayout(targetGraph: ChannelGraph): void {
+function calculateCurrentLayout(targetGraph: ChannelGraph) {
+    return calculateChannelLayout(targetGraph.nodes, { displayMode: displayMode.value });
+}
+
+function scheduleLayout(targetGraph: ChannelGraph, refocus = false): void {
     clearSelectedLayoutTimer();
     const generation = ++layoutGeneration;
-    calculateChannelLayout(targetGraph.nodes).then(positions => {
+    calculateCurrentLayout(targetGraph).then(positions => {
         if (generation === layoutGeneration && graph.value === targetGraph) {
             targetGraph.applyLayout(positions);
+            if (refocus && focusId.value) focusRevision.value += 1;
         }
     });
 }
@@ -176,7 +183,7 @@ function scheduleSelectedLayout(targetGraph: ChannelGraph, isClosingSelection: b
     clearSelectedLayoutTimer();
     selectedLayoutTimer = setTimeout(() => {
         selectedLayoutTimer = undefined;
-        calculateChannelLayout(targetGraph.nodes).then(positions => {
+        calculateCurrentLayout(targetGraph).then(positions => {
             if (generation === layoutGeneration && graph.value === targetGraph) {
                 targetGraph.applyLayout(positions);
                 if (!isClosingSelection) audioManager.playBloom();
@@ -188,6 +195,10 @@ function scheduleSelectedLayout(targetGraph: ChannelGraph, isClosingSelection: b
 
 function revealMessageNode(id: string): void {
     graph.value?.revealMessageNode(id);
+}
+
+function updateGraphVisibility(targetGraph: ChannelGraph, selected?: string) {
+    return targetGraph.updateVisibility(selected, undefined, displayMode.value);
 }
 
 function focusEventToast(channelId: string, toastId: number): void {
@@ -287,9 +298,9 @@ function connectStream() {
             pendingGraph = nextGraph;
             status.value = `${nextGraph.nodes.length.toLocaleString()}チャンネルを配置中`;
 
-            nextGraph.updateVisibility(selectedId.value);
+            updateGraphVisibility(nextGraph, selectedId.value);
 
-            const positions = await calculateChannelLayout(nextGraph.nodes);
+            const positions = await calculateCurrentLayout(nextGraph);
 
             if (!mounted || generation !== layoutGeneration) return;
 
@@ -314,12 +325,12 @@ function connectStream() {
             updatedAt.value = new Date(payload.ts * 1000).toLocaleTimeString("ja-JP");
 
             if (graph.value) {
-                const changed = graph.value.updateVisibility(selectedId.value);
+                const changed = updateGraphVisibility(graph.value, selectedId.value);
 
                 if (changed) {
                     const generation = ++layoutGeneration;
 
-                    calculateChannelLayout(graph.value.nodes).then(positions => {
+                    calculateCurrentLayout(graph.value).then(positions => {
                         if (generation === layoutGeneration) {
                             graph.value?.applyLayout(positions);
                             if (focusId.value) focusRevision.value += 1;
@@ -379,7 +390,7 @@ watch(selectedId, (newId, oldId) => {
         return;
     }
 
-    const changed = graph.value.updateVisibility(newId);
+    const changed = updateGraphVisibility(graph.value, newId);
     focusId.value = newId;
     const isClosingSelection = !newId && Boolean(oldId);
 
@@ -389,6 +400,14 @@ watch(selectedId, (newId, oldId) => {
         }
         scheduleSelectedLayout(graph.value, isClosingSelection);
     }
+});
+
+watch(displayMode, (mode: ChannelDisplayMode) => {
+    const targetGraph = graph.value;
+    if (!targetGraph) return;
+
+    const changed = updateGraphVisibility(targetGraph, selectedId.value);
+    if (changed) scheduleLayout(targetGraph, mode === "all");
 });
 
 onBeforeUnmount(() => {
@@ -424,7 +443,8 @@ onBeforeUnmount(() => {
             :selected-id="selectedId"
             :focus-id="focusId"
             :focus-revision="focusRevision"
-            :active-only="activeOnly"
+            :active-only="effectiveActiveOnly"
+            :display-mode="displayMode"
             @select="selectedId = $event"
             @message-node-reached="revealMessageNode"
             @activity-change="activity = $event"
@@ -516,6 +536,7 @@ onBeforeUnmount(() => {
         <DisplayControls
             v-if="authState === 'authenticated'"
             v-model="activeOnly"
+            v-model:display-mode="displayMode"
         />
 
         <ChannelDetails
