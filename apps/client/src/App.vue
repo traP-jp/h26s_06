@@ -15,9 +15,10 @@ import { ChannelGraph } from "./core/channelGraph";
 import { KeyboardController } from "./core/keyboardController";
 import { beginLogin, fetchCurrentUser } from "./services/auth";
 import { calculateChannelLayout } from "./services/channelLayout";
+import { ChannelStatus } from "./services/channelStatus";
 import { EventStream } from "./services/eventStream";
 import { KeyboardManager } from "./services/keyboardManager";
-import type { AuthUser } from "./types/api";
+import type { AuthUser, ViewersPayload } from "./types/api";
 
 type AuthState = "checking" | "authenticated" | "error" | "forbidden";
 
@@ -39,6 +40,9 @@ const {
     lastEvent,
     updatedAt,
     renderError,
+    viewers,
+    viewersPending,
+    viewersUnavailable,
     selected,
     connectionLabel,
     recordTrigger,
@@ -54,6 +58,36 @@ const currentUser = ref<AuthUser>();
 const focusId = ref<string | undefined>();
 const focusRevision = ref(0);
 const settingsOpen = ref(false);
+let pendingStatusChannelId: string | undefined;
+let bufferedViewers: ViewersPayload | undefined;
+
+function applyViewers(payload: ViewersPayload): void {
+    viewers.value = payload.viewers;
+    viewersPending.value = false;
+    viewersUnavailable.value = false;
+}
+
+const channelStatus = isDemoMode
+    ? undefined
+    : new ChannelStatus({
+          onSending(channelId) {
+              pendingStatusChannelId = channelId;
+              bufferedViewers = undefined;
+          },
+          onApplied(channelId) {
+              if (pendingStatusChannelId === channelId) pendingStatusChannelId = undefined;
+              if (channelId === (selectedId.value ?? "") && bufferedViewers) {
+                  applyViewers(bufferedViewers);
+                  bufferedViewers = undefined;
+              }
+          },
+          onError(channelId) {
+              if (pendingStatusChannelId === channelId) pendingStatusChannelId = undefined;
+              if (channelId !== (selectedId.value ?? "")) return;
+              viewersPending.value = false;
+              viewersUnavailable.value = true;
+          },
+      });
 
 const showLoading = computed(
     () => authState.value !== "error" && authState.value !== "forbidden" && !graph.value
@@ -234,6 +268,15 @@ function connectStream() {
             }
         },
 
+        onViewers(payload) {
+            if (!selectedId.value) return;
+            if (pendingStatusChannelId !== undefined) {
+                if (pendingStatusChannelId === selectedId.value) bufferedViewers = payload;
+                return;
+            }
+            applyViewers(payload);
+        },
+
         onMalformedEvent(eventName) {
             status.value = `${eventName} イベントを解釈できませんでした`;
         },
@@ -263,6 +306,12 @@ onMounted(() => {
 });
 
 watch(selectedId, (newId, oldId) => {
+    viewers.value = [];
+    bufferedViewers = undefined;
+    viewersPending.value = Boolean(newId) && !isDemoMode;
+    viewersUnavailable.value = isDemoMode;
+    channelStatus?.setChannel(newId);
+
     if (!graph.value) {
         focusId.value = newId;
         return;
@@ -291,6 +340,7 @@ onBeforeUnmount(() => {
     keyboardManager.stop();
     mounted = false;
     authGeneration += 1;
+    channelStatus?.setChannel();
     stopStream(false);
 });
 </script>
@@ -376,6 +426,8 @@ onBeforeUnmount(() => {
         <ChannelDetails
             v-if="selected"
             :selected="selected"
+            :viewer-count="viewersUnavailable ? undefined : viewers.length"
+            :viewers-pending="viewersPending"
             @close="selectedId = undefined"
         />
 
