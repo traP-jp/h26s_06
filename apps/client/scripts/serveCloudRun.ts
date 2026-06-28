@@ -6,7 +6,7 @@ const distRoot = resolve(import.meta.dir, "../dist");
 const port = getPort(process.env.PORT);
 const backendProxyEnabled = isTruthy(process.env.GCLOUD_BACKEND_PROXY);
 const serverUpstream = backendProxyEnabled
-    ? normalizeUpstream(process.env.SERVER_UPSTREAM ?? "http://localhost:8080")
+    ? new URL("http://localhost:8080")
     : null;
 
 const contentTypes = new Map([
@@ -53,13 +53,6 @@ function getPort(value: string | undefined): number {
     const parsedPort = Number.parseInt(value ?? "", 10);
 
     return Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : 5173;
-}
-
-function normalizeUpstream(value: string): URL {
-    const withProtocol = /^[\w+.-]+:\/\//.test(value)
-        ? value
-        : `http://${value}`;
-    return new URL(withProtocol);
 }
 
 function isTruthy(value: string | undefined): boolean {
