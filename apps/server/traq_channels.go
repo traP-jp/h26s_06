@@ -39,6 +39,14 @@ func (s *server) fetchChannelData(ctx context.Context, accessToken string) (chan
 	if err != nil {
 		return channelData{}, err
 	}
+	if s.store != nil {
+		records, err := s.store.LoadChannelScores(ctx)
+		if err != nil {
+			return channelData{}, fmt.Errorf("load channel scores: %w", err)
+		}
+		restored := state.restoreScoreRecords(records)
+		traqLogOK("restored channel scores rows=%d active=%d", len(records), restored)
+	}
 	traqLogOK("GET /api/v3/channels -> %s public=%d active=%d", resp.Status, len(list.Public), len(channels))
 	return channelData{
 		Channels:   channels,
