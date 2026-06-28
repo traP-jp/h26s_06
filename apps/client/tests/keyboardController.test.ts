@@ -5,17 +5,22 @@ import { KeyboardController, type KeyboardNavigation } from "../src/core/keyboar
 interface ControllerState {
     selectedId?: string;
     navigation?: KeyboardNavigation;
+    shortcutsOpen: boolean;
     settingsOpen: boolean;
 }
 
 function setup(initialState: Partial<ControllerState> = {}) {
     const state: ControllerState = {
+        shortcutsOpen: false,
         settingsOpen: false,
         ...initialState,
     };
     const onMuteToggle = mock();
     const onSettingsOpen = mock(() => {
         state.settingsOpen = true;
+    });
+    const onShortcutsClose = mock(() => {
+        state.shortcutsOpen = false;
     });
     const onSettingsClose = mock(() => {
         state.settingsOpen = false;
@@ -26,16 +31,40 @@ function setup(initialState: Partial<ControllerState> = {}) {
         setSelectedId: id => {
             state.selectedId = id;
         },
+        isShortcutsOpen: () => state.shortcutsOpen,
         isSettingsOpen: () => state.settingsOpen,
         onMuteToggle,
+        onShortcutsClose,
         onSettingsOpen,
         onSettingsClose,
     });
 
-    return { controller, state, onMuteToggle, onSettingsOpen, onSettingsClose };
+    return {
+        controller,
+        state,
+        onMuteToggle,
+        onShortcutsClose,
+        onSettingsOpen,
+        onSettingsClose,
+    };
 }
 
 describe("KeyboardController", () => {
+    test("closes shortcuts on Escape before closing settings", () => {
+        const { controller, state, onShortcutsClose, onSettingsClose } = setup({
+            selectedId: "selected",
+            shortcutsOpen: true,
+            settingsOpen: true,
+        });
+
+        controller.handleEscape();
+
+        expect(onShortcutsClose).toHaveBeenCalledTimes(1);
+        expect(onSettingsClose).not.toHaveBeenCalled();
+        expect(state.settingsOpen).toBe(true);
+        expect(state.selectedId).toBe("selected");
+    });
+
     test("closes settings on Escape before changing the selection", () => {
         const { controller, state, onSettingsClose } = setup({
             selectedId: "selected",

@@ -75,6 +75,7 @@ const currentUser = ref<AuthUser>();
 const focusId = ref<string | undefined>();
 const focusRevision = ref(0);
 const settingsOpen = ref(false);
+const shortcutsOpen = ref(false);
 const detailsOpen = ref(false);
 const activity = ref(0);
 let pendingStatusChannelId: string | undefined;
@@ -131,6 +132,7 @@ function openSettings(): void {
 
 function closeSettings(): void {
     settingsOpen.value = false;
+    shortcutsOpen.value = false;
 }
 
 const keyboardController = new KeyboardController({
@@ -139,8 +141,12 @@ const keyboardController = new KeyboardController({
     setSelectedId: id => {
         selectedId.value = id;
     },
+    isShortcutsOpen: () => shortcutsOpen.value,
     isSettingsOpen: () => settingsOpen.value,
     onMuteToggle: toggleMuted,
+    onShortcutsClose: () => {
+        shortcutsOpen.value = false;
+    },
     onSettingsOpen: openSettings,
     onSettingsClose: closeSettings,
     onCameraMoveChange: (direction, active) => {
@@ -434,6 +440,7 @@ onBeforeUnmount(() => {
         <SettingsDrawer
             v-if="authState === 'authenticated'"
             v-model="settingsOpen"
+            v-model:shortcuts-open="shortcutsOpen"
             :connection="connection"
             :connection-label="connectionLabel"
             :status="status"

@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { ref } from "vue";
-
 import { audioManager } from "../audio/audioManager";
 import { useAudioSettings } from "../composables/useAudioSettings";
 import type { AuthUser, ConnectionState } from "../types/api";
 
 const open = defineModel<boolean>({ required: true });
-const shortcutsOpen = ref(false);
+const shortcutsOpen = defineModel<boolean>("shortcutsOpen", { required: true });
 defineProps<{
     connection: ConnectionState;
     connectionLabel: string;

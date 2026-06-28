@@ -20,8 +20,10 @@ interface KeyboardControllerOptions {
     getSelected: () => SelectedChannel | undefined;
     getSelectedId: () => string | undefined;
     setSelectedId: (id: string | undefined) => void;
+    isShortcutsOpen: () => boolean;
     isSettingsOpen: () => boolean;
     onMuteToggle: () => void;
+    onShortcutsClose: () => void;
     onSettingsOpen: () => void;
     onSettingsClose: () => void;
     onCameraMoveChange: (direction: CameraMoveDirection, active: boolean) => void;
@@ -34,6 +36,11 @@ export class KeyboardController {
     constructor(private readonly options: KeyboardControllerOptions) {}
 
     handleEscape(): void {
+        if (this.options.isShortcutsOpen()) {
+            this.options.onShortcutsClose();
+            return;
+        }
+
         if (this.options.isSettingsOpen()) {
             this.options.onSettingsClose();
             return;
