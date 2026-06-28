@@ -172,7 +172,9 @@ export class ChannelGraph {
         }
 
         let node = this.get(id);
-        let heat = trigger.type === "msg" ? MESSAGE_SCORE_AMOUNT : MOVEMENT_SCORE_AMOUNT;
+        let heat =
+            trigger.delta ??
+            (trigger.type === "msg" ? MESSAGE_SCORE_AMOUNT : MOVEMENT_SCORE_AMOUNT);
         while (node) {
             node.currentScore += heat;
             node.targetScore += heat;
