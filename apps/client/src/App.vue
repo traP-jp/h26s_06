@@ -68,6 +68,7 @@ const focusId = ref<string | undefined>();
 const focusRevision = ref(0);
 const settingsOpen = ref(false);
 const detailsOpen = ref(false);
+const activity = ref(0);
 const galaxyCanvas = ref<GalaxyCanvasControls>();
 
 const showLoading = computed(
@@ -361,6 +362,7 @@ onBeforeUnmount(() => {
             :active-only="activeOnly"
             @select="selectedId = $event"
             @message-node-reached="revealMessageNode"
+            @activity-change="activity = $event"
             @render-error="renderError = $event"
         />
 
@@ -423,6 +425,7 @@ onBeforeUnmount(() => {
         <ChannelDetails
             v-if="selected && detailsOpen"
             :selected="selected"
+            :activity="activity"
             @close="detailsOpen = false"
         />
 
