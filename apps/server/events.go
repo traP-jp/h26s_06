@@ -115,7 +115,7 @@ func (s *server) handleEvents(c echo.Context) error {
 	}
 }
 
-func (s *server) runSyncProducer(ctx context.Context, state *stateManager, hub *eventHub, persistScores bool) {
+func (s *server) runSyncProducer(ctx context.Context, state *stateManager, hub *eventHub) {
 	ticker := time.NewTicker(s.cfg.syncInterval)
 	defer ticker.Stop()
 
@@ -124,18 +124,34 @@ func (s *server) runSyncProducer(ctx context.Context, state *stateManager, hub *
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			payload := state.syncPayload()
-			if persistScores {
-				s.persistChannelScores(ctx, state)
-			}
-			if len(payload.Deltas) > 0 {
-				hub.publish(marshalEvent("sync", payload))
-			}
+			publishSyncPayload(state, hub)
 		}
 	}
 }
 
-func (s *server) persistChannelScores(ctx context.Context, state *stateManager) {
+func (s *server) runLiveSyncProducer(ctx context.Context, state *stateManager, hub *eventHub) {
+	ticker := time.NewTicker(s.cfg.syncInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			publishSyncPayload(state, hub)
+			s.persistChannelScores(state)
+		}
+	}
+}
+
+func publishSyncPayload(state *stateManager, hub *eventHub) {
+	payload := state.syncPayload()
+	if len(payload.Deltas) > 0 {
+		hub.publish(marshalEvent("sync", payload))
+	}
+}
+
+func (s *server) persistChannelScores(state *stateManager) {
 	if s.store == nil {
 		return
 	}
@@ -143,7 +159,7 @@ func (s *server) persistChannelScores(ctx context.Context, state *stateManager) 
 	if len(records) == 0 {
 		return
 	}
-	saveCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	saveCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := s.store.SaveChannelScores(saveCtx, records); err != nil {
 		traqLogWarn("persist channel scores failed: %v", err)

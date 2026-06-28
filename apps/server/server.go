@@ -104,6 +104,12 @@ func (s *server) close() {
 	if s.liveSyncCancel != nil {
 		s.liveSyncCancel()
 	}
+	s.liveMu.Lock()
+	liveState := s.liveData.State
+	s.liveMu.Unlock()
+	if liveState != nil {
+		s.persistChannelScores(liveState)
+	}
 	s.demoHub.close()
 	s.liveHub.close()
 	s.viewerHub.close()
@@ -144,7 +150,7 @@ func (s *server) startDemoSyncProducer() {
 	s.demoSyncOnce.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		s.demoSyncCancel = cancel
-		go s.runSyncProducer(ctx, s.demoState, s.demoHub, false)
+		go s.runSyncProducer(ctx, s.demoState, s.demoHub)
 	})
 }
 
@@ -152,7 +158,7 @@ func (s *server) startLiveSyncProducer(state *stateManager) {
 	s.liveSyncOnce.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		s.liveSyncCancel = cancel
-		go s.runSyncProducer(ctx, state, s.liveHub, true)
+		go s.runLiveSyncProducer(ctx, state, s.liveHub)
 	})
 }
 

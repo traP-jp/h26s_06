@@ -652,14 +652,19 @@ func TestStateManagerRestoresKnownChannelScores(t *testing.T) {
 	if known.Score != 7.5 {
 		t.Fatalf("known score = %v, want 7.5", known.Score)
 	}
-	if known.LastSyncScore != 7 {
-		t.Fatalf("known last sync score = %v, want 7", known.LastSyncScore)
+	if known.LastSyncScore != 0 {
+		t.Fatalf("known last sync score = %v, want 0", known.LastSyncScore)
 	}
 	if known.LastViewTime.IsZero() {
 		t.Fatal("known last view time was not restored")
 	}
 	if empty.Score != 0 {
 		t.Fatalf("empty score = %v, want 0", empty.Score)
+	}
+
+	payload := state.syncPayload()
+	if _, ok := payload.Deltas["known"]; !ok {
+		t.Fatal("restored score was not included in the next sync payload")
 	}
 }
 

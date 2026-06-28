@@ -13,6 +13,7 @@ import {
     LineSegments,
     MeshBasicMaterial,
     PerspectiveCamera,
+    Points,
     SRGBColorSpace,
     Scene,
     ShaderMaterial,
@@ -26,7 +27,11 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 
-import { ACTIVE_RELATIVE_SCORE_THRESHOLD, type ChannelGraph } from "../core/channelGraph";
+import {
+    type ChannelDisplayMode,
+    type ChannelGraph,
+    isActiveChannelNode,
+} from "../core/channelGraph";
 import type {
     CameraMoveDirection,
     CameraRotationDirection,
@@ -45,10 +50,12 @@ const props = defineProps<{
     focusId?: string;
     focusRevision: number;
     activeOnly: boolean;
+    displayMode: ChannelDisplayMode;
 }>();
 const emit = defineEmits<{
     select: [id: string | undefined];
     messageNodeReached: [id: string];
+    activityChange: [activity: number];
     renderError: [message: string];
 }>();
 const host = useTemplateRef<HTMLDivElement>("host");
@@ -71,6 +78,9 @@ const shootingStarPoolSize = 40;
 const shootingStarMeanInterval = 3000;
 const shootingStarClusterChance = 0.18;
 const shootingStarClusterMax = 5;
+const backgroundStarCount = 220;
+const backgroundStarMinRadius = 1050;
+const backgroundStarMaxRadius = 1850;
 
 interface ShootingStar {
     active: boolean;
@@ -91,6 +101,7 @@ let cameraController: CameraController | undefined;
 let composer: EffectComposer | undefined;
 let effects: EffectPool | undefined;
 let nodes: InstancedMesh<SphereGeometry, ShaderMaterial> | undefined;
+let backgroundStars: Points<BufferGeometry, ShaderMaterial> | undefined;
 let shootingStars: LineSegments<BufferGeometry, LineBasicMaterial> | undefined;
 let hierarchyEdges: LineSegments<BufferGeometry, LineBasicMaterial> | undefined;
 let selectionPath: Line<BufferGeometry, LineBasicMaterial> | undefined;
@@ -106,6 +117,30 @@ let hoverPending = false;
 let resizeObserver: ResizeObserver | undefined;
 let nodeBuffer = new NodeBuffer(props.graph.nodes.length);
 let hierarchyEdgeBuffer = new HierarchyEdgeBuffer(props.graph.nodes);
+let lastActivity = -1;
+let activitySelectedId: string | undefined;
+
+function updateSelectedActivity(allowIncrease = false) {
+    const selectedId = props.selectedId;
+    const relativeScore = selectedId ? (props.graph.get(selectedId)?.relativeScore ?? 0) : 0;
+    const activity = Math.round(Math.min(1, Math.max(0, relativeScore)) * 100);
+
+    if (selectedId !== activitySelectedId) {
+        activitySelectedId = selectedId;
+        lastActivity = activity;
+        emit("activityChange", activity);
+        return;
+    }
+    if (activity > lastActivity && !allowIncrease) return;
+    if (activity === lastActivity) return;
+
+    lastActivity = activity;
+    emit("activityChange", activity);
+}
+
+function handleActivityNodeReached(id: string) {
+    if (id === props.selectedId) updateSelectedActivity(true);
+}
 let hierarchyEdgeBaseColors = createEdgeBaseColors();
 const projectedNode = new Vector3();
 const hoverPointer = new Vector2();
@@ -170,6 +205,8 @@ function initialise() {
         controls.enablePan = true;
         cameraController = new CameraController(camera, controls);
 
+        backgroundStars = createBackgroundStars();
+        scene.add(backgroundStars);
         resetShootingStars();
         shootingStars = createShootingStars();
         scene.add(shootingStars);
@@ -179,7 +216,12 @@ function initialise() {
         scene.add(hierarchyEdges);
         selectionPath = createSelectionPath();
         scene.add(selectionPath);
-        effects = new EffectPool(scene, props.graph, id => emit("messageNodeReached", id));
+        effects = new EffectPool(
+            scene,
+            props.graph,
+            id => emit("messageNodeReached", id),
+            handleActivityNodeReached
+        );
         composer = new EffectComposer(renderer);
         composer.addPass(new RenderPass(scene, camera));
         composer.addPass(
@@ -227,7 +269,13 @@ function createNodeMesh() {
     });
     const mesh = new InstancedMesh(geometry, material, props.graph.nodes.length);
     mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-    nodeBuffer.update(props.graph.nodes, performance.now(), props.selectedId, props.activeOnly);
+    nodeBuffer.update(
+        props.graph.nodes,
+        performance.now(),
+        props.selectedId,
+        props.activeOnly,
+        props.displayMode
+    );
     (mesh.instanceMatrix.array as Float32Array).set(nodeBuffer.matrixData);
     for (let index = 0; index < props.graph.nodes.length; index += 1) {
         const offset = index * 3;
@@ -273,6 +321,80 @@ function createShootingStars() {
     return lines;
 }
 
+function createBackgroundStars() {
+    const positions = new Float32Array(backgroundStarCount * 3);
+    const phases = new Float32Array(backgroundStarCount);
+    const sizes = new Float32Array(backgroundStarCount);
+    let randomState = 0x6d2b79f5;
+    const random = () => {
+        randomState = (Math.imul(randomState, 1_664_525) + 1_013_904_223) >>> 0;
+        return randomState / 0x1_0000_0000;
+    };
+
+    for (let index = 0; index < backgroundStarCount; index += 1) {
+        const z = random() * 2 - 1;
+        const angle = random() * Math.PI * 2;
+        const radial = Math.sqrt(1 - z * z);
+        const radius =
+            backgroundStarMinRadius +
+            random() * (backgroundStarMaxRadius - backgroundStarMinRadius);
+        const offset = index * 3;
+        positions[offset] = Math.cos(angle) * radial * radius;
+        positions[offset + 1] = Math.sin(angle) * radial * radius;
+        positions[offset + 2] = z * radius;
+        phases[index] = random() * Math.PI * 2;
+        sizes[index] = 1.8 * (0.82 + random() * 0.36);
+    }
+
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("aPhase", new Float32BufferAttribute(phases, 1));
+    geometry.setAttribute("aSize", new Float32BufferAttribute(sizes, 1));
+    const stars = new Points(
+        geometry,
+        new ShaderMaterial({
+            uniforms: {
+                uTime: { value: 0 },
+                uPixelRatio: { value: renderer?.getPixelRatio() ?? 1 },
+                uColor: { value: new Color("#c4ddff") },
+            },
+            vertexShader: `
+                attribute float aPhase;
+                attribute float aSize;
+                uniform float uTime;
+                uniform float uPixelRatio;
+                varying float vTwinkle;
+
+                void main() {
+                    vec3 animatedPosition = position;
+                    animatedPosition.x += sin(uTime * 0.22 + aPhase) * 1.6;
+                    animatedPosition.y += cos(uTime * 0.18 + aPhase * 1.3) * 1.2;
+                    vTwinkle = 0.72 + sin(uTime * 1.15 + aPhase) * 0.28;
+                    gl_PointSize = aSize * uPixelRatio * (0.9 + vTwinkle * 0.1);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(animatedPosition, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 uColor;
+                varying float vTwinkle;
+
+                void main() {
+                    float distanceFromCenter = length(gl_PointCoord - vec2(0.5));
+                    float glow = 1.0 - smoothstep(0.08, 0.5, distanceFromCenter);
+                    gl_FragColor = vec4(uColor, glow * vTwinkle * 0.24);
+                }
+            `,
+            transparent: true,
+            blending: AdditiveBlending,
+            depthWrite: false,
+            toneMapped: false,
+        })
+    );
+    stars.frustumCulled = false;
+    stars.renderOrder = -20;
+    return stars;
+}
+
 function createEdges() {
     const positions = new Float32Array(hierarchyEdgeBuffer.capacity * 6);
     const colors = new Float32Array(hierarchyEdgeBuffer.capacity * 6);
@@ -302,6 +424,10 @@ function createEdges() {
 
 function updateEdges(now: number) {
     if (!hierarchyEdges) return;
+    if (props.displayMode === "all") {
+        hierarchyEdges.geometry.setDrawRange(0, 0);
+        return;
+    }
     const positionAttribute = hierarchyEdges.geometry.getAttribute(
         "position"
     ) as Float32BufferAttribute;
@@ -404,10 +530,19 @@ function draw(now: number) {
     const delta = Math.min((now - lastFrame) / 1000, 0.1);
     lastFrame = now;
     props.graph.update(delta);
+    updateSelectedActivity();
     for (const event of props.graph.takeVisualEvents()) effects?.play(event, now);
     effects?.update(now);
     updateShootingStars(now);
-    nodeBuffer.update(props.graph.nodes, now, props.selectedId, props.activeOnly);
+    const starTimeUniform = backgroundStars?.material.uniforms.uTime;
+    if (starTimeUniform) starTimeUniform.value = now * 0.001;
+    nodeBuffer.update(
+        props.graph.nodes,
+        now,
+        props.selectedId,
+        props.activeOnly,
+        props.displayMode
+    );
     (nodes.instanceMatrix.array as Float32Array).set(nodeBuffer.matrixData);
     nodes.instanceMatrix.needsUpdate = true;
     updateEdges(now);
@@ -418,7 +553,7 @@ function draw(now: number) {
     const timeUniform = nodes.material.uniforms.uTime;
     if (timeUniform) timeUniform.value = now * 0.001;
     if (!customRotationActive) controls?.update();
-    constrainRotationCenterToViewport();
+    constrainGraphToViewport();
     updateHoverCursor();
     composer.render();
 }
@@ -819,12 +954,7 @@ function rotateAroundSelectedNode(deltaX: number, deltaY: number) {
     cameraController?.rotateAround(pivotNode, deltaX, deltaY, element.clientHeight);
 }
 
-function constrainRotationCenterToViewport() {
-    if (props.focusId) {
-        const pivotNode = props.graph.get(props.focusId);
-        if (pivotNode) cameraController?.constrainPivotToViewport(pivotNode);
-        return;
-    }
+function constrainGraphToViewport() {
     cameraController?.constrainPointsToViewport(props.graph.nodes.filter(isNodeRendered));
 }
 
@@ -900,8 +1030,7 @@ function isNodeRendered(node: ChannelGraph["nodes"][number]) {
     if (node.visibilityAlpha < 0.05) return false;
     return (
         !props.activeOnly ||
-        node.relativeScore > ACTIVE_RELATIVE_SCORE_THRESHOLD ||
-        node.activeDescendantScore > 0 ||
+        isActiveChannelNode(node) ||
         node.id === "grand_root" ||
         node.id === props.selectedId
     );
@@ -933,6 +1062,7 @@ function dispose() {
     controls?.dispose();
     effects?.dispose();
     effects = undefined;
+    backgroundStars = undefined;
     shootingStars = undefined;
     hierarchyEdges = undefined;
     selectionPath = undefined;

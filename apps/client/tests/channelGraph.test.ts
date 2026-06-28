@@ -87,6 +87,30 @@ function emphasizedChildIds(graph: ChannelGraph) {
         .map(node => node.id);
 }
 
+describe("ChannelGraph node colors", () => {
+    test("reserves white for the grand root", () => {
+        const graph = new ChannelGraph({
+            grand_root: {
+                id: "grand_root",
+                parentId: "",
+                children: ["island"],
+                depth: 0,
+                islandId: -1,
+            },
+            island: {
+                id: "island",
+                parentId: "grand_root",
+                children: [],
+                depth: 1,
+                islandId: 8,
+            },
+        });
+
+        expect(graph.get("grand_root")!.color).toBe("#ffffff");
+        expect(graph.get("island")!.color).toBe("#00d6c9");
+    });
+});
+
 describe("ChannelGraph dense child emphasis", () => {
     test("emphasizes a sample and changes it after selection changes", () => {
         const graph = new ChannelGraph(createDenseChannels());
@@ -182,6 +206,25 @@ describe("ChannelGraph active visibility", () => {
         graph.update(1);
 
         expect(graph.get("nested")!.visibilityAlpha).toBeGreaterThan(0);
+    });
+
+    test("activates every node in all channel display mode", () => {
+        const graph = new ChannelGraph(createDeepChannels());
+
+        expect(graph.updateVisibility(undefined, undefined, "all")).toBe(true);
+
+        expect(graph.nodes.every(node => node.isLayoutActive)).toBe(true);
+        expect(graph.nodes.every(node => node.emphasis === 1)).toBe(true);
+    });
+
+    test("does not mark the selected node as an expansion origin in all channel display mode", () => {
+        const graph = new ChannelGraph(createDeepChannels());
+
+        graph.updateVisibility("branch", undefined, "all");
+
+        expect(graph.get("branch")!.isLayoutActive).toBe(true);
+        expect(graph.get("branch")!.isExpansionOrigin).toBe(false);
+        expect(graph.get("nested")!.isLayoutActive).toBe(true);
     });
 });
 

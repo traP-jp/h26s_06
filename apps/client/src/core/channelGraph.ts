@@ -9,7 +9,7 @@ const PALETTE = [
     "#20c878",
     "#168cff",
     "#a33ce8",
-    "#e8f0ff",
+    "#00d6c9",
 ];
 const DENSE_CHILD_THRESHOLD = 24;
 const DENSE_EMPHASIZED_CHILDREN = 12;
@@ -18,6 +18,7 @@ const ANCESTOR_SCORE_FACTOR = 0.45;
 const SCORE_DECAY_TIME_SCALE = 300;
 const RELATIVE_SCORE_SCALE_FLOOR = 2.2;
 export const ACTIVE_RELATIVE_SCORE_THRESHOLD = 0.08;
+export type ChannelDisplayMode = "collapsed" | "all";
 
 export interface ChannelNode {
     index: number;
@@ -42,6 +43,10 @@ export interface ChannelNode {
     emphasis: number;
     activeDescendantScore: number;
     color: string;
+}
+
+export function isActiveChannelNode(node: ChannelNode): boolean {
+    return node.relativeScore > ACTIVE_RELATIVE_SCORE_THRESHOLD || node.activeDescendantScore > 0;
 }
 
 export type VisualEvent =
@@ -253,7 +258,9 @@ export class ChannelGraph {
     private emphasisGeneration = 0;
     private lastVisibilitySelection: string | null | undefined;
 
-    updateVisibility(selectedId?: string, k: number = 3) {
+    updateVisibility(selectedId?: string, k: number = 3, mode: ChannelDisplayMode = "collapsed") {
+        if (mode === "all") return this.updateAllChannelVisibility();
+
         let changed = false;
         const activePaths = new Set<string>();
         const requiredEmphasisIds = new Set<string>();
@@ -361,6 +368,40 @@ export class ChannelGraph {
                 changed = true;
             }
         }
+        this.updateActiveDescendantScores();
+        return changed;
+    }
+
+    private updateAllChannelVisibility() {
+        let changed = false;
+        this.pendingMessageRevealIds.clear();
+
+        for (const node of this.nodes) {
+            if (node.isExpansionOrigin) {
+                node.isExpansionOrigin = false;
+                changed = true;
+            }
+
+            if (!node.isLayoutActive) {
+                const parent = node.parentId ? this.get(node.parentId) : undefined;
+                if (parent) {
+                    node.x = parent.x;
+                    node.y = parent.y;
+                    node.z = parent.z;
+                    node.targetX = parent.targetX;
+                    node.targetY = parent.targetY;
+                    node.targetZ = parent.targetZ;
+                }
+                node.isLayoutActive = true;
+                changed = true;
+            }
+
+            if (node.emphasis !== 1) {
+                node.emphasis = 1;
+                changed = true;
+            }
+        }
+
         this.updateActiveDescendantScores();
         return changed;
     }

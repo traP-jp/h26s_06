@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import { audioManager } from "./audio/audioManager";
+import ActivityChannels from "./components/ActivityChannels.vue";
 import AppMetrics from "./components/AppMetrics.vue";
 import AppTopBar from "./components/AppTopBar.vue";
 import ChannelDetails from "./components/ChannelDetails.vue";
@@ -11,7 +12,7 @@ import SettingsDrawer from "./components/SettingsDrawer.vue";
 import { useAppState } from "./composables/useAppState";
 import { useAudioSettings } from "./composables/useAudioSettings";
 import { useBackgroundSync } from "./composables/useBackgroundSync";
-import { ChannelGraph } from "./core/channelGraph";
+import { type ChannelDisplayMode, ChannelGraph } from "./core/channelGraph";
 import {
     type CameraMoveDirection,
     type CameraRotationDirection,
@@ -49,9 +50,10 @@ const {
     status,
     selectedId,
     activeOnly,
+    displayMode,
     eventCount,
-    lastEvent,
     updatedAt,
+    eventToasts,
     renderError,
     viewers,
     viewersPending,
@@ -60,6 +62,8 @@ const {
     connectionLabel,
     recordTrigger,
     resetActivity,
+    dismissEventToast,
+    clearEventToasts,
 } = useAppState();
 
 const { toggleMuted } = useAudioSettings();
@@ -72,6 +76,7 @@ const focusId = ref<string | undefined>();
 const focusRevision = ref(0);
 const settingsOpen = ref(false);
 const detailsOpen = ref(false);
+const activity = ref(0);
 let pendingStatusChannelId: string | undefined;
 let bufferedViewers: ViewersPayload | undefined;
 
@@ -107,6 +112,7 @@ const galaxyCanvas = ref<GalaxyCanvasControls>();
 const showLoading = computed(
     () => authState.value !== "error" && authState.value !== "forbidden" && !graph.value
 );
+const effectiveActiveOnly = computed(() => displayMode.value === "collapsed" && activeOnly.value);
 
 function reloadPage(): void {
     window.location.reload();
@@ -152,12 +158,17 @@ const keyboardController = new KeyboardController({
 });
 const keyboardManager = new KeyboardManager(keyboardController);
 
-function scheduleLayout(targetGraph: ChannelGraph): void {
+function calculateCurrentLayout(targetGraph: ChannelGraph) {
+    return calculateChannelLayout(targetGraph.nodes, { displayMode: displayMode.value });
+}
+
+function scheduleLayout(targetGraph: ChannelGraph, refocus = false): void {
     clearSelectedLayoutTimer();
     const generation = ++layoutGeneration;
-    calculateChannelLayout(targetGraph.nodes).then(positions => {
+    calculateCurrentLayout(targetGraph).then(positions => {
         if (generation === layoutGeneration && graph.value === targetGraph) {
             targetGraph.applyLayout(positions);
+            if (refocus && focusId.value) focusRevision.value += 1;
         }
     });
 }
@@ -173,7 +184,7 @@ function scheduleSelectedLayout(targetGraph: ChannelGraph, isClosingSelection: b
     clearSelectedLayoutTimer();
     selectedLayoutTimer = setTimeout(() => {
         selectedLayoutTimer = undefined;
-        calculateChannelLayout(targetGraph.nodes).then(positions => {
+        calculateCurrentLayout(targetGraph).then(positions => {
             if (generation === layoutGeneration && graph.value === targetGraph) {
                 targetGraph.applyLayout(positions);
                 if (!isClosingSelection) audioManager.playBloom();
@@ -185,6 +196,22 @@ function scheduleSelectedLayout(targetGraph: ChannelGraph, isClosingSelection: b
 
 function revealMessageNode(id: string): void {
     graph.value?.revealMessageNode(id);
+}
+
+function updateGraphVisibility(targetGraph: ChannelGraph, selected?: string) {
+    return targetGraph.updateVisibility(selected, undefined, displayMode.value);
+}
+
+function focusEventToast(channelId: string, toastId: number): void {
+    if (!channelId) return;
+    focusChannel(channelId);
+    dismissEventToast(toastId);
+}
+
+function focusChannel(channelId: string): void {
+    selectedId.value = channelId;
+    focusId.value = channelId;
+    focusRevision.value += 1;
 }
 
 async function retryAuthentication() {
@@ -276,9 +303,9 @@ function connectStream() {
             pendingGraph = nextGraph;
             status.value = `${nextGraph.nodes.length.toLocaleString()}チャンネルを配置中`;
 
-            nextGraph.updateVisibility(selectedId.value);
+            updateGraphVisibility(nextGraph, selectedId.value);
 
-            const positions = await calculateChannelLayout(nextGraph.nodes);
+            const positions = await calculateCurrentLayout(nextGraph);
 
             if (!mounted || generation !== layoutGeneration) return;
 
@@ -303,12 +330,12 @@ function connectStream() {
             updatedAt.value = new Date(payload.ts * 1000).toLocaleTimeString("ja-JP");
 
             if (graph.value) {
-                const changed = graph.value.updateVisibility(selectedId.value);
+                const changed = updateGraphVisibility(graph.value, selectedId.value);
 
                 if (changed) {
                     const generation = ++layoutGeneration;
 
-                    calculateChannelLayout(graph.value.nodes).then(positions => {
+                    calculateCurrentLayout(graph.value).then(positions => {
                         if (generation === layoutGeneration) {
                             graph.value?.applyLayout(positions);
                             if (focusId.value) focusRevision.value += 1;
@@ -368,7 +395,7 @@ watch(selectedId, (newId, oldId) => {
         return;
     }
 
-    const changed = graph.value.updateVisibility(newId);
+    const changed = updateGraphVisibility(graph.value, newId);
     focusId.value = newId;
     const isClosingSelection = !newId && Boolean(oldId);
 
@@ -380,10 +407,19 @@ watch(selectedId, (newId, oldId) => {
     }
 });
 
+watch(displayMode, (mode: ChannelDisplayMode) => {
+    const targetGraph = graph.value;
+    if (!targetGraph) return;
+
+    const changed = updateGraphVisibility(targetGraph, selectedId.value);
+    if (changed) scheduleLayout(targetGraph, mode === "all");
+});
+
 onBeforeUnmount(() => {
     keyboardManager.stop();
     mounted = false;
     authGeneration += 1;
+    clearEventToasts();
     channelStatus?.setChannel();
     clearSelectedLayoutTimer();
     stopStream(false);
@@ -412,9 +448,11 @@ onBeforeUnmount(() => {
             :selected-id="selectedId"
             :focus-id="focusId"
             :focus-revision="focusRevision"
-            :active-only="activeOnly"
+            :active-only="effectiveActiveOnly"
+            :display-mode="displayMode"
             @select="selectedId = $event"
             @message-node-reached="revealMessageNode"
+            @activity-change="activity = $event"
             @render-error="renderError = $event"
         />
 
@@ -458,18 +496,64 @@ onBeforeUnmount(() => {
             v-if="authState === 'authenticated'"
             :graph="graph"
             :event-count="eventCount"
-            :last-event="lastEvent"
             :updated-at="updatedAt"
         />
+
+        <ActivityChannels
+            v-if="authState === 'authenticated' && graph"
+            :graph="graph"
+            @select="focusChannel"
+        />
+
+        <aside
+            v-if="authState === 'authenticated'"
+            class="event-toasts"
+            aria-live="polite"
+            aria-label="イベント通知"
+        >
+            <TransitionGroup name="event-toast">
+                <article
+                    v-for="toast in eventToasts"
+                    :key="toast.id"
+                    class="event-toast"
+                    :data-tone="toast.tone"
+                >
+                    <button
+                        type="button"
+                        class="event-toast__focus"
+                        :aria-label="`${toast.detail}のチャンネルにフォーカス`"
+                        @click="focusEventToast(toast.channelId, toast.id)"
+                    >
+                        <span
+                            class="event-toast__signal"
+                            aria-hidden="true"
+                        />
+                        <span class="event-toast__body">
+                            {{ toast.detail }}
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        class="event-toast__close"
+                        aria-label="イベント通知を閉じる"
+                        @click="dismissEventToast(toast.id)"
+                    >
+                        ×
+                    </button>
+                </article>
+            </TransitionGroup>
+        </aside>
 
         <DisplayControls
             v-if="authState === 'authenticated'"
             v-model="activeOnly"
+            v-model:display-mode="displayMode"
         />
 
         <ChannelDetails
             v-if="selected && detailsOpen"
             :selected="selected"
+            :activity="activity"
             :viewer-count="viewersUnavailable ? undefined : viewers.length"
             :viewers-pending="viewersPending"
             @close="detailsOpen = false"

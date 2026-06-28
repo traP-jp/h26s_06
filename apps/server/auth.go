@@ -122,11 +122,7 @@ func (s *server) handleCallback(c echo.Context) error {
 	s.authMu.Unlock()
 	if s.store != nil {
 		if err := s.store.SaveAuthSession(r.Context(), sessionID, session); err != nil {
-			s.authMu.Lock()
-			delete(s.sessions, sessionID)
-			s.authMu.Unlock()
-			traqLogError("persist oauth session failed: %v", err)
-			return echoHTTPError(c, "failed to persist session", http.StatusInternalServerError)
+			traqLogWarn("persist oauth session failed; using in-memory session only: %v", err)
 		}
 	}
 

@@ -14,15 +14,15 @@ const (
 	recentMessageIDLimit = 100
 	maxSyncPayloadDeltas = 100
 
-  messageScoreAmount         = 1.0
-  messageScoreReferenceChars = 20
-  movementScoreAmount        = 0.025
-  ancestorScoreFactor        = 0.45
-  scoreDecayTimeScale        = 300.0
-  messageCountTimeScale      = 300.0
-  minMessageCount            = 0.01
-  syncDeltaWeightScale       = 10.0
-  viewerScoreWeight          = 0.46
+	messageScoreAmount         = 1.0
+	messageScoreReferenceChars = 20
+	movementScoreAmount        = 0.025
+	ancestorScoreFactor        = 0.45
+	scoreDecayTimeScale        = 300.0
+	messageCountTimeScale      = 300.0
+	minMessageCount            = 0.01
+	syncDeltaWeightScale       = 10.0
+	viewerScoreWeight          = 0.46
 )
 
 type channel struct {
@@ -237,7 +237,6 @@ func (sm *stateManager) restoreScoreRecords(records map[string]scoreRecord) int 
 			continue
 		}
 		ch.Score = record.Score
-		ch.LastSyncScore = record.LastSyncScore
 		if !record.LastSyncTime.IsZero() {
 			ch.LastSyncTime = record.LastSyncTime
 		}
@@ -281,6 +280,17 @@ func (sm *stateManager) initPayloadBytes() []byte {
 	}
 	sm.initJSON = data
 	return append([]byte(nil), data...)
+}
+
+func (sm *stateManager) channelName(channelID string) (string, bool) {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	channel := sm.channels[channelID]
+	if channel == nil {
+		return "", false
+	}
+	return channel.Name, true
 }
 
 func (sm *stateManager) setUserStatus(userID string, channelID string) bool {
@@ -585,17 +595,6 @@ func (sm *stateManager) sampleViewerChannels(candidates []traqChannel, maxChanne
 		channels = append(channels, selectedChannel.channel)
 	}
 	return channels
-}
-
-func (sm *stateManager) channelName(channelID string) (string, bool) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	ch := sm.channels[channelID]
-	if ch == nil {
-		return "", false
-	}
-	return ch.Name, true
 }
 
 func viewerPollWeight(score float64, elapsedSeconds float64) float64 {
