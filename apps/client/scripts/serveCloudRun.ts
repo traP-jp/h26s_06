@@ -1,0 +1,114 @@
+/// <reference types="bun" />
+
+import { extname, normalize, resolve, sep } from "node:path";
+
+const distRoot = resolve(import.meta.dir, "../dist");
+const port = getPort(process.env.PORT);
+const serverUpstream = normalizeUpstream(
+    process.env.SERVER_UPSTREAM ?? "http://localhost:8080",
+);
+
+const contentTypes = new Map([
+    [".css", "text/css; charset=utf-8"],
+    [".html", "text/html; charset=utf-8"],
+    [".ico", "image/x-icon"],
+    [".js", "text/javascript; charset=utf-8"],
+    [".json", "application/json; charset=utf-8"],
+    [".mp3", "audio/mpeg"],
+    [".png", "image/png"],
+    [".svg", "image/svg+xml"],
+    [".wasm", "application/wasm"],
+]);
+
+Bun.serve({
+    port,
+    async fetch(request) {
+        const url = new URL(request.url);
+
+        if (url.pathname.startsWith("/api")) {
+            return proxyApiRequest(request, url);
+        }
+
+        if (url.pathname === "/healthz") {
+            return new Response(null, { status: 204 });
+        }
+
+        return serveStaticFile(url.pathname);
+    },
+});
+
+console.info(`client listening on :${port}; proxying /api to ${serverUpstream}`);
+
+function getPort(value: string | undefined): number {
+    const parsedPort = Number.parseInt(value ?? "", 10);
+
+    return Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : 5173;
+}
+
+function normalizeUpstream(value: string): URL {
+    const withProtocol = /^[\w+.-]+:\/\//.test(value)
+        ? value
+        : `http://${value}`;
+    return new URL(withProtocol);
+}
+
+async function proxyApiRequest(request: Request, url: URL): Promise<Response> {
+    const target = new URL(url.pathname + url.search, serverUpstream);
+    const headers = new Headers(request.headers);
+    headers.delete("host");
+
+    return fetch(target, {
+        body: allowsBody(request.method) ? request.body : undefined,
+        headers,
+        method: request.method,
+        redirect: "manual",
+    });
+}
+
+async function serveStaticFile(pathname: string): Promise<Response> {
+    if (pathname.endsWith("/")) {
+        return serveIndex();
+    }
+
+    const filePath = resolveStaticPath(pathname);
+    const file = Bun.file(filePath);
+
+    if (await file.exists()) {
+        return new Response(file, {
+            headers: fileHeaders(filePath),
+        });
+    }
+
+    return serveIndex();
+}
+
+function serveIndex(): Response {
+    return new Response(Bun.file(resolve(distRoot, "index.html")), {
+        headers: fileHeaders("index.html"),
+    });
+}
+
+function resolveStaticPath(pathname: string): string {
+    const decodedPathname = decodeURIComponent(pathname);
+    const normalizedPathname = normalize(decodedPathname).replace(
+        /^(\.\.[/\\])+/,
+        "",
+    );
+    const filePath = resolve(distRoot, `.${normalizedPathname}`);
+
+    if (!filePath.startsWith(`${distRoot}${sep}`) && filePath !== distRoot) {
+        return resolve(distRoot, "index.html");
+    }
+
+    return filePath;
+}
+
+function fileHeaders(filePath: string): HeadersInit {
+    const contentType = contentTypes.get(extname(filePath));
+
+    return contentType === undefined ? {} : { "content-type": contentType };
+}
+
+function allowsBody(method: string): boolean {
+    return method !== "GET" && method !== "HEAD";
+}
