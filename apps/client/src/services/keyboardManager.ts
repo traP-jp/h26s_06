@@ -33,6 +33,7 @@ const CAMERA_ROTATION_KEYS = {
     j: "right",
     l: "left",
 } as const satisfies Record<string, CameraRotationDirection>;
+const GRAND_ROOT_SELECTION_KEY = "r";
 
 type CameraMoveKey = keyof typeof CAMERA_MOVE_KEYS;
 type CameraZoomKey = keyof typeof CAMERA_ZOOM_KEYS;
@@ -74,6 +75,11 @@ export class KeyboardManager {
 
         if (isPlainKeyEvent(event)) {
             const key = event.key.toLowerCase();
+            if (isGrandRootSelectionKey(key)) {
+                event.preventDefault();
+                this.controller.selectGrandRoot();
+                return;
+            }
             if (isCameraControlKey(key)) {
                 event.preventDefault();
                 this.setCameraKeyActive(key, true);
@@ -139,6 +145,10 @@ function isCameraRotationKey(key: string): key is CameraRotationKey {
 
 function isCameraControlKey(key: string): key is CameraControlKey {
     return isCameraMoveKey(key) || isCameraZoomKey(key) || isCameraRotationKey(key);
+}
+
+function isGrandRootSelectionKey(key: string): boolean {
+    return key === GRAND_ROOT_SELECTION_KEY;
 }
 
 function isPlainKeyEvent(event: KeyboardEvent): boolean {
